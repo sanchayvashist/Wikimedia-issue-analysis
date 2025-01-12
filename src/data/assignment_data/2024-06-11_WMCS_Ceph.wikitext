@@ -1,0 +1,154 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T367191
+| paged-num = 1
+| responders-num = 6
+| coordinators = taavi
+| start = 2024-06-11 14:58
+| end = 2024-06-11 15:23
+| metrics = WMCS services do not have SLOs, so no relevant SLOs exist.
+| impact = For about 25 minutes Cloud VPS and all services hosted on it (incl. Toolforge) were completely inaccessible.
+}}
+
+A faulty optic on one of the fiber links between WMCS racks caused packet loss between nodes in the Cloud VPS [[Ceph]] storage cluster. This made writes any writes stall since Ceph could not confirm those writes had been committed on all nodes they were supposed to on. Cloud VPS VMs cannot handle their storage hanging like this and stalled too, which made any services hosted on Cloud VPS inaccessible for the duration of the incident.
+
+{{TOC|align=right}}
+
+==Timeline==
+[[File:T367191 faulty optic.png|thumb|Interface errors on the affected switch interface as seen on LibreNMS]]
+''All times in UTC.''
+*Starting from ~2024-06-10 23:00, there's an increase on errors reported on [https://librenms.wikimedia.org/device/device=185/tab=port/port=23292/ cloudsw1-d5-eqiad:et-0/0/53] (connected to [https://librenms.wikimedia.org/device/device=242/tab=port/port=25230/ cloudsw1-f4-eqiad:et-0/0/54]). As well as linking hosts in d5 and f4 (<mark>TODO: and possibly E4 and F4? need to check</mark>), this is the [[Network design - Eqiad WMCS Network Infra#Cloud Instances Vlan|active link used to connect the stretched cloud-instances VLAN]] to the F4 rack. These errors are happening in bursts, until..
+*2024-06-11 14:58:09 First alert: <+jinxer-wm> FIRING: CephSlowOps: Ceph cluster in eqiad has 4 slow ops - <nowiki>https://wikitech.wikimedia.org/wiki/Portal:Cloud_VPS/Admin/Runbooks/CephSlowOps</nowiki> - <nowiki>https://grafana.wikimedia.org/d/P1tFnn3Mk/wmcs-ceph-eqiad-health?orgId=1&search=open&tag=ceph&tag=health&tag=WMCS</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DCephSlowOps</nowiki>  '''OUTAGE STARTS'''
+*15:01:50 First page: <+icinga-wm_> PROBLEM - toolschecker: NFS read/writeable on labs instances on checker.tools.wmflabs.org is CRITICAL: HTTP CRITICAL: HTTP/1.1 504 Gateway Time-out - string OK not found on <nowiki>http://checker.tools.wmflabs.org:80/nfs/home</nowiki> - 324 bytes in 60.004 second response time <nowiki>https://wikitech.wikimedia.org/wiki/Portal:Toolforge/Admin/Toolschecker</nowiki>
+*~15:02 Taavi notices the alerts during the Toolforge monthly meeting and asks David to investigate. That meeting is subsequently postponed by a week.
+*15:04 David pings Cathal on IRC about a possible network issue. Cathal is in the middle of an another switch upgrade but starts looking
+*15:09 Taavi declares an incident and becomes an IC
+*15:10 Meet room is opened for incident response coordination
+*15:15 David sets the Ceph cluster in norebalance mode to prevent the cluster from moving things around for now
+*15:18 Alert for OOM killer activating on cloudcephmon1001. <mark>TODO: not sure for the impact of this?</mark>
+*15:20 Arturo runs script on all Ceph nodes to try to determine patterns to pin down the issue. <mark>TODO: was this succesful in locating the issue?</mark>
+*15:2x Cathal notices high numbers of errors on the affected interfaces, and disables <mark>TODO: the interfaces? BGP?</mark> to move traffic to other links. This isn't immediately communicated to the WMCS team debugging the issue on the Meet room. '''OUTAGE ENDS'''
+*15:23 Alerts start recovering.
+*15:26 Cathal moves the cloud-instances VLAN links to E4 and F4 from D5 to C8
+*15:50 Taavi starts cookbook to reboot all Toolforge NFS-enabled workers nodes
+*16:40-17:10 DC-Ops replaces faulty optic
+
+==Detection==
+Automated alerting noticed the issue - the first alert was a warning that pointed towards a Ceph issue of some sort at 14:58:09, and a page was sent out from a toolschecker NFS alert about four minutes later (15:01:50). The first human report arrived on IRC several minutes later:<syntaxhighlight lang="irc">
+15:08:35 <Lucas_WMDE> it looks like there might be connection issues at the moment? I can’t connect to tools via HTTPS nor SSH
+</syntaxhighlight>
+
+The initial alerts located the issue well, although they were followed by a high volume of generic "VPS instance" down alerts (on IRC and via email).
+
+<mark>TODO: did metricsinfra or its meta check send any pages? if not, why?</mark>
+
+== Conclusions ==
+===What went well?===
+* Automated monitoring noticed the issue fast and provided useful pointers where to look
+* Ceph handled the network degradation relatively well and quickly recovered once traffic was shifted to alternative links
+* After previous Toolforge NFS issues, the tooling built for recovering from those (by restarting worker nodes) worked very well
+
+===What went poorly?===
+* WMCS team's methods of finding the affected interfaces was not very efficient - the LibreNMS graphs were much more helpful but we did not know where to find them
+* Netops were in the middle of an another switch update and communication between WMCS and Netops wasn't very efficient
+* Taavi's declaration of an incident and him being IC got lost in the IRC chatter for some people, leading to initially duplicate efforts
+
+===Where did we get lucky?===
+* People with relevant knowledge were around and available quickly
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+* {{done}} [[phab:T367199|T367199]] Replace the faulty optic
+* Figure out if we should alert for interface errors like this one
+* {{done}} [[phab:T367336]] Add both sides of the links to discard/error graphs for router connectivity to the ceph dashboards
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

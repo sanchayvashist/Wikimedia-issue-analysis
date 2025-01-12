@@ -1,0 +1,154 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T329931
+| paged-num = 0
+| responders-num = 
+| coordinators = 
+| start = 2022-02-28 00:04:00
+| end = 2022-02-28 02:20:00
+| impact = Data loss on GitLab production host for one and a half hours, reduced availability for 20 minutes
+}}
+
+<!-- Reminder: No private information on this page! -->GitLab was switched to the other data center as a planned maintenance in [[phab:T330717|T329931]]. During the switchover some configuration had to be changed depending on the instance state (production or replica). The daily restore job was not disabled on the new production host in codfw, resulting in a backup being restored on the production host. So all actions between the backup (Feb 28th 00:04:00) and the restore (Feb 28th 02:00:00) are lost.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*27 Feb 10:00 gitlab1004 is switched over to gitlab2002 as part of the planned maintenance
+*27 Feb 12:00 maintenance is over
+*28 Feb 00:04 backup is triggered on gitlab2002 '''- Incident begins'''
+*28 Feb 02:00 restore is triggered on gitlab2002
+*28 Feb 02:03 monitoring "probe down" for production host: [[phab:T330717|T330717]]
+*28 Feb 02:20: restore is finished - '''Incident ends'''
+<!-- Reminder: No private information on this page! -->
+
+==Detection==
+The issue was detected by automatic monitoring and task creation (probeDown)  in https://phabricator.wikimedia.org/T330717<syntaxhighlight lang="bash">
+
+    alertname: ProbeDown
+    instance: gitlab2002:443
+    job: probes/custom
+    prometheus: ops
+    severity: task
+    site: codfw
+    source: prometheus
+    team: serviceops-collab
+
+</syntaxhighlight>
+
+==Conclusions ==
+
+===What went well?===
+
+* automatic alerting caught the restore on the production host (probe down)
+* production instance was working normally after the restore (beside data loss)
+* rsync server was disabled on the production host, preventing restore of replica-backups (which would cause more data loss)
+
+===What went poorly?===
+
+* Manual configuration changes for the restore timer (profile::gitlab::enable_restore) were not adjusted on the new host
+* It was assumed backup is handled automatically, depending on the instance status similar to backups
+* Timers were not double checked after the switchover
+
+===Where did we get lucky?===
+
+* Only one and a half hours of data loss, could be even worse if backups from the replica would have been restored
+* Low usage during UTC night, no user reported issues
+** One connection over SSH during that time at: Feb 28 01:48:25
+** two merges/other actions in two other projects
+
+==Links to relevant documentation==
+
+* https://phabricator.wikimedia.org/T329931
+* [[GitLab/Failover]]
+
+==Actionables==
+
+* Enable and disable restore automatically depending on instance status (https://gerrit.wikimedia.org/r/c/operations/puppet/+/892892) - done
+*Automate failover/switchover using a cookbook - [[phab:T330771|T330771]]
+*Add check of timers after a failover/switchover (manual or automated)?
+*Add safeguard to restore script for production/active host - [[phab:T331295|T331295]]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|Yes in general, no for GitLab specifically, but that's to be expected in this case.
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|No Google doc, the response was tracked in a task only.
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|The monitoring was not meant for this specific failure, but worked nonetheless
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

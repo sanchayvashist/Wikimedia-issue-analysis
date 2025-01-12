@@ -1,0 +1,84 @@
+
+
+== Summary ==
+
+
+A bug introduced to the MediaWiki codebase caused an increase in connections to Confd hosts from systems responsible for Dumps which in turn lead to a high volume of log events and ultimately a filled up filesystem.
+
+
+
+==Timeline==
+All times in UTC.
+
+*2022-09-06: A bug is introduced on MediaWiki core codebase on 5b0b54599bfd, causing configuration to be checked for every row of a database query on WikiExport.php, but the feature is not yet enabled.
+*2022-10-24: The feature is enabled: https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/848201
+*2022-11-03 08:09 Systemd timer starts dump process on snapshot10[10,13,12,11] that starts accessing dbctl/etcd (on conf1* hosts) once per row from a database query result.
+*17:06 OUTAGE BEGINS conf1008 icinga alert: <icinga-wm> PROBLEM - Disk space on conf1008 is CRITICAL: DISK CRITICAL - free space: / 2744 MB (3% inode=98%): /tmp 2744 MB (3% inode=98%): /var/tmp 2744 MB (3% inode=98%): https://wikitech.wikimedia.org/wiki/Monitoring/Disk_space
+*17:10 Incident opened, elukey notifies of conf1008 root partition almost full
+*17:13 Disk space is freed with apt-get clean
+*17:37 Some nodes reach 100% disk usage
+*17:37 nginx logs are truncated
+*17:39 etcd_access.log.1 are truncated in the 3 conf100* nodes
+*17:39 OUTAGE ENDS: Disk space is under control
+*17:46 DB maintenance is stopped
+*17:48 denisse becomes IC
+*17:50 All pooling/depooling of databases is stopped
+*17:52 The origin of the issue is identified as excessive connections from snapshot[10,13,12,11]
+*17:58 snapshot hosts stopped hammering etcd after pausing dumps
+*18:15 Code change of fix merged https://sal.toolforge.org/log/4iLgPoQBa_6PSCT93YhE
+
+
+
+
+==Detection==
+The last symptom of his issue was detected by an Icinga alert: conf1008 icinga alert: <icinga-wm> PROBLEM - Disk space on conf1008 is CRITICAL: DISK CRITICAL - free space: / 2744 MB (3% inode=98%): /tmp 2744 MB (3% inode=98%): /var/tmp 2744 MB (3% inode=98%): https://wikitech.wikimedia.org/wiki/Monitoring/Disk_space
+
+==Conclusions ==
+
+===What went well?===
+
+* confd/etcd designed to not be a SPOF prevented further bad things from happening
+
+===What went poorly?===
+
+* We could have reacted to disk space warnings already instead of criticals
+* There where several other metrics clearly pointing out that "something is off" (see linked graphs)
+
+===Where did we get lucky?===
+
+* People where around to react to the disk space critical alert
+
+==Links to relevant documentation==
+
+* Task that introduced the source of this issue: MW scripts should reload the database config; 
+
+==Actionables==
+
+* conf* hosts ran out of disk space due to log spam; 
+* Monitor high load on etcd/conf* hosts to prevent incidents of software requiring config reload too often; 
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	Yes	although some had responded to previous incidents as well
+People                                        	Were the people who responded prepared enough to respond effectively                                              	Yes	
+People                                        	Were fewer than five people paged?                                                                                	Yes	No page
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	No 	No page
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	No 	No page
+Process                                       	Was the incident status section actively updated during the incident?                                             	No 	IC came in late
+Process                                       	Was the public status page updated?                                                                               	No 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	Yes	
+Process                                       	Are the documented action items assigned?                                                                         	Yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	No 	From the memory of review ritual participants we had that exact same issue before
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	Yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	Yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	Yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	Yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	No 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	9  	

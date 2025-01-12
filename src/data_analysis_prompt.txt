@@ -1,0 +1,37 @@
+Instructions:
+You will be given incident report of a software application deployment or technical issues at Wikimedia based on the instruction get more details about incident.
+
+Goal: Categorise provided text using the defined classes and format the output as per the required JSON structure.
+Important: Only extract and categorize text exactly as they appear from the given categories and mappings in instructions.
+Format: Strictly follow the given JSON output format.
+Classes: Use only the class names provided. Do not create new classes or alter them.
+Input Handling: Treat each text segment in the input list independently and apply the instructions to each one.
+Output Structure: For every input text, each identified entity must map to its respective class in the correct order within the output JSON array.
+
+
+
+Classes: Categorise in one of the following classes based on understanding of summary
+    - cause_of_incident: 
+        ["Schema and Database Issues", "Data Management and Retention", "Server and Infrastructure Failures", "API and Integration Failures", "Performance and Load Issues", "Configuration and Deployment Errors", "Monitoring and Detection Gaps", "Security and Access Issues", "Code and Application Bugs", "External Dependencies"]
+    - severity_level: 
+        ["low", "mid", "high"] 
+    - major_impact
+        ["Service Downtime", "Data Loss or Corruption", "Degraded System Performance", "Security Vulnerabilities or Breaches", "API or Integration Failures"]
+
+Sample Input:
+SNo | summary
+1 |  A schema change affected mariadb's optimizer, causing a very frequent query to take significantly longer and resulting in an outage for all wikis for 20 minutes
+2 | On Dec 2nd 2020, the Analytics team migrated the Hive's netflow data set from the wmf database to the event database, but missed whitelisting it in the data purging job, leading to the deletion of data older than 90 days.
+3 | At 02:05 UTC, the parse2007 server in Codfw started to respond with fatal errors, likely due to a php-opcache corruption. The server was restarted at 11:20 UTC, which resolved the issue.
+
+Sample Output:
+SNo | cause_of_incident | severity_level | major_impact 
+1 | "Schema and Database Issues" | "high" | "Service Downtime"
+2 | "Data Management and Retention" | "mid" | "Data Loss or Corruption"
+3 | "Code and Application Bugs" | "high" | "Degraded System Performance"
+
+Important Note:
+1. Return empty for empty strings, nan, None, null
+
+Input:
+{input_text}

@@ -1,0 +1,175 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T327001
+| paged-num = ?
+| responders-num = ?
+| coordinators = effie, inflatador
+| start = 2023_01_17 13:00:00
+| end = not ongoing/follow up stage
+| impact = All hosts in codfw row B lost network connectivity. End-user impact TBD.
+}}
+
+Two main issues happened during this window:
+
+# The prep work to bring online the replacement switch from the [[labsconsole:Incidents/2023-01-14_asw-b2-codfw_failure|prior incident]] triggered a Junos bug which brought instability in row B (mostly impacting connectivity between the different switches in row B)
+# Another Junos bug (triggered by an operator error) broke IPv6 connectivity for the whole row
+
+The first point was quickly fixed, while the 2nd required onsite work to minimize downtime as it required B2 to come back up to be able to reboot B7 (those two are the uplinks to the core routers).
+
+[[File:Screen Shot 2023-01-17 at 1.51.45 PM.png|alt=Switch status during incident|thumb|Switch status during incident]]
+
+{{TOC|align=right}}
+
+==Timeline==
+
+
+''All times in UTC.''
+
+* 12:49: #pages for hosts down in codfw
+* 12:57: codfw frontend depooled  geoip/generic-map/codfw => DOWN
+* 13:00  Incident opened. effie becomes IC.
+* 13:01: conftool action : set/pooled=false; selector: dnsdisc=restbase-async,name=codfw
+* 13:01 : conftool action : set/pooled=true; selector: dnsdisc=restbase-async,name=.*
+* 13:12: Klaxxoned all SREs
+* 13:13: START - Cookbook sre.discovery.service-route check citoid: maintenance
+* 13:14: START - Cookbook sre.discovery.service-route depool mobileapps in codfw: maintenance
+* 13:14: <Emperor> depool swift from codfw [ sudo confctl --object-type discovery select 'dnsdisc=swift,name=codfw' set/pooled=false] 
+* 13:16: misconfiguration on router fixed, IPv4 works, IPv6 still not working
+* 13:26 _joe_: depooling all services in codfw
+* 13:27: jynus: restarting manually replication on es2020, may require data check afterwards
+* 13:35: mvernon: conftool action : set/pooled=false; selector: dnsdisc=thanos-swift,name=codfw
+* 13:35: mvernon: conftool action : set/pooled=false; selector: dnsdisc=thanos-query,name=codfw
+* 13:37: jiji: conftool action : set/pooled=false; selector: dnsdisc=recommendation-api,name=codfw
+* 13:40: claime: investigating unreachable etcds on ganeti host ganeti2020.codfw.wmnet
+* 14:10: restart cassandra on aqs2005 (didn’t help)
+* 14:39: topranks: I added a static ARP entry for the secondary IPv4 addresses belonging to restbase2013 on cr2-codfw and they are reachable again 
+* 14:39: so the issue is similar to the IPv6 problem, in that the switch is not forwarding certain multicast/broadcasts (some ARP, all ICMPv6 ND)
+* 15:26: XioNoX: we're going to bring B2 into the row B virtual chassis,
+* 15:29: :XioNoX: rack B2 comming up, looks stable
+* 15:42: claime: etcd clusters OK
+* 16:20 inflatador becomes IC
+* 16:59 effie:  !log pooling back depooled mw servers in codfw
+* 17:07 bblack: confirmed that all B2 hosts seem to be on private1-b-codfw, and yeah all have the :118: issue (except the one I manually fixed)
+* 17:16 bblack: │ trying the cumin run
+* 17:17: bblack: [done]
+
+
+==Detection==
+
+* 12:49: LibreNMS alerts fired. Example verbiage: ''Alert for device asw-b-codfw.mgmt.codfw.wmnet - virtual-chassis crash''
+* The issues were triggered by Netops work, so engineers were already looking and identified the bugs quickly
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+Yes and yes
+
+==Conclusions ==
+===What went well?===
+
+* Alerts helped pinpoint the root cause almost immediately
+* The prep work was done in advance of scheduled onsite work
+* Most services continued to work over IPv4 when IPv6 was not working
+
+===What went poorly?===
+
+*The eqiad and codfw Juniper virtual chassis are particularly sensitive to switch replacements
+*Some of codfw switches are cabled differently from our standards, resulting in some virtual-chassis cables being already connected on the "to be configured" switch
+*We hit two different bugs in the same window
+
+===Where did we get lucky?===
+
+* Incident happened during EU working hours
+* Services were already depooled from Saturday's incident (some luck, but also good judgement from Saturday's responders)
+
+==Links to relevant documentation==
+
+==Actionables==
+
+* Create a cookbook to properly depool (or switchover) all services from a datacenter [[phab:T327665|T327665]]
+** Cookbook for rack depool - https://phabricator.wikimedia.org/T327300
+* Visually represent (grafana) where a service is being served from any given time (eqiad, codfw, or both), so we can return to the same state before the incident [[phab:T327663|T327663]]
+* Data check es2020 {{phab|T327770}}
+* Upgrade all of eqiad and codfw rows - https://phabricator.wikimedia.org/T327248
+* (longer term) Plan codfw row A/B top-of-rack switch refresh - https://phabricator.wikimedia.org/T327938
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|T327001
+|-
+|Are the documented action items assigned?
+|no
+|No action items yet, will consult with more experienced SREs before creating
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|Originally a question mark, so defaulting to no
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

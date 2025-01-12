@@ -1,0 +1,107 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task = T313825
+| paged-num = 0
+| responders-num = 3
+| coordinators = Jaime
+| start = 2022-08-10 10:32:00
+| end = 2022-08-10 13:31:00
+| impact = No external impact.
+}}
+
+A Puppet patch ([[gerrit:c/operations/puppet/+/817307|change 817307]]) was merged which would accidentally install confd on a significant number of production hosts. The Puppet provisioning for these confd installations failed half-way due to having no corresponding Icinga checks defined. This in turn fired an Icinga alert:
+ 10:44 <icinga-wm> PROBLEM - Widespread puppet agent failures on alert1001 is CRITICAL: 0.1057 ge 0.01 
+Engineers started work on reversing it, by cleaning up the inadvertent installs of confd via Cumin. Security posture was not compromised and there was no external user impact.
+
+'''Documentation''':
+
+* puppet failures - https://logstash.wikimedia.org/goto/a5b60af08e257d90a469a78d12056ec2
+*[[Confd]]
+* [[Cumin]]
+
+==Actionables==
+
+* Git defaults to shows the author's date, not the commit date. Consider adding the following aliases to your git config as fix:
+** <code>lola = log --graph --pretty=format:\"%C(auto)%h%d%Creset %C(cyan)(%cr)%Creset %C(green)%cn <%ce>%Creset %s\" --all</code>
+** <code>grephist = log --graph --pretty=format:\"%C(auto)%h%d%Creset %C(cyan)(%cr)%Creset %C(green)%cn <%ce>%Creset %s\" --all -S</code>
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|Overlap of 3
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|n/a
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|n/a
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|no
+|
+|-
+|Are the documented action items assigned?
+|yes
+|action items limited to improved local bash aliases
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|12
+|
+|}

@@ -1,0 +1,157 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task = T315350
+| paged-num = 0
+| responders-num = 8
+| coordinators = TheresNoTime
+| start = 2022-08-16 17:57:00
+| end = 2022-08-17 00:57:00
+| metrics = beta has a best effort SLA
+| impact = For 7 hours, all Beta Cluster sites were unavailable. This also affected daily Selenium test jobs.
+}}
+After an inadvertent restart of some WMCS cloudvirts and their associated VMs, all sites within the Beta Cluster (e.g. https://meta.wikimedia.beta.wmflabs.org/wiki/Main_Page) failed to load, with ''<code>Error: 502, Next Hop Connection Failed</code>'' — this persisted post-restart of the relevant VMs.
+
+Drafting: possibly an apache config/puppet failure (https://phabricator.wikimedia.org/T315350#8159826), restarting trafficserver seems to have fixed it (https://phabricator.wikimedia.org/T315350#8159954)
+
+The incident was complicated by the lack of Beta Cluster's maintenance meaning ongoing "normal" errors distracted from the cause.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*2022-08-16 17:57 '''OUTAGE BEGINS:''' Uptime monitoring "pages" [[User:Samtar|TheresNoTime]], who informs #wikimedia-operations & #wikimedia-releng
+**This coincides with the WMCS VM accidental restarts ([Cloud] [Cloud-announce] Some cloud-vps servers just rebooted)
+*2022-08-16 18:21 [[phab:T315350|T315350]] logged
+*2022-08-17 00:57 '''OUTAGE ENDS'''
+
+==Detection==
+* [[User:Samtar|TheresNoTime]] has an uptime monitor at https://uptime.theresnotime.io/status/wmf-beta which "paged" her
+* User reports
+* CI errors from beta sync
+
+==Conclusions==
+
+===What went well?===
+
+* A number of volunteers were available to triage
+===What went poorly?===
+* no paging/alerting surfaced on IRC, so minimal initial visibility
+* lack of fast response from people with sufficient knowledge
+* beta is already broken in weird and wonderful ways
+
+===Where did we get lucky?===
+
+* No deployments were affected
+* Beta wasn't needed due to test/replicate production issues during the time.
+
+<mark>(Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+===How many people were involved in the remediation?===
+
+* 3 Volunteers
+* 2 Release Engineers
+* 2 SRE - 1 Search Platform, 1 ServiceOps
+* 1 WMCS admin
+
+
+<mark>(Use bullet points) for example: 2 SREs and 1 software engineer troubleshooting the issue plus 1 incident commander</mark>
+
+==Links to relevant documentation==
+
+*…
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* [[phab:T315379|logspam watch broken on beta]] {{done}}
+* [[phab:T315394|Remove two cherry-picked reverts from deployment-puppetmaster04]] {{done}}
+* [[phab:T315395|Rebase & merge or re-cherry-pick 668701 on deployment-puppetmaster04]]
+* [[phab:T315386|Replace certificate on deployment-elastic09.deployment-prep]] {{done}}
+* [[phab:T315695|Add basic alerting]]
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|no
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+| no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+| yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|no
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|5
+|
+|}

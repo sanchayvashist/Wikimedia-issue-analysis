@@ -1,0 +1,98 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+[[File:Errors during 2021-07-26 DPL outage.png|thumb|Spikes in 503 errors returned to users]]
+[[File:Overall traffic during 2021-07-26 DPL outage.png|thumb|Corresponding graphs of traffic during the outage, showing approximately 15% of requests receiving errors.]]
+Following a large bot import to the Russian Wikinews, expanding the size of that project to 13 million pages, slow queries originating from ruwikinews's usage of the [[mw:Extension:DynamicPageList (Wikimedia)|DynamicPageList extension]]  (also known as "[[git:mediawiki/extensions/intersection|intersection]]") overloaded the s3 cluster of databases, causing php-fpm processes to hang/stall, eventually taking down all wikis with it. The outage was resolved by disabling the DynamicPageList extension on ruwikinews and aggressively killing queries on s3 replicas. Normally, DPL's database queries roughly scale to the size of the smallest category being intersected. This would be bad enough, as ruwikinews has categories that are orders of magnitude higher than other wikis with this extension. However, in this case MariaDB chose a query plan that involved scanning the entire categorylinks table. The query in question seen during the outage took more than 3 minutes to finish on an idle replica.
+
+The DPL query was using a sort by page_id, descending (instead of the more common sort by c1.cl_timestamp that is DPL's default sort method). According to the [[phab:P16896|EXPLAIN]], MariaDB decided to optimize this by using the PRIMARY key on (cl_from, cl_to) [Remember, cl_from is a foreign key to the page_id of the page in the category, and cl_to is the name of the category in question]. This would have been a good query plan if most of the rows of the В_мире category matched the query (or even just 18 of them), especially since they all had high cl_from since they were all newly created. However, since no rows matched the query, this resulted in a full table scan of the categorylinks table (44,435,648 rows). The other possible query plan, using the (cl_to, cl_timestamp) index to only look at the 180,231 rows for the В_мире category and then filesorting the results, would probably have been more efficient in this case due to no rows matching the query. Potentially, disabling the sort by page_id feature of DPL, and instead only allowing the sort by c1.cl_timestamp (c1 in this case was [[n:ru:Category:Опубликовано|Опубликовано]]) would likely result in more efficient queries, relatively speaking. For context the reason the default method of sorting is sort by the first category's timestamp, is to allow the first category to be a "published" category, and allow showing results in order of when they were published. It would be even more efficient (And reduce likelihood of filesorts) if the sort was by the timestamp of the smallest category, although that may not be the behaviour desired by users.
+
+It appears the triggering event was the creation of [[n:ru:Category:В мире]] which was linked on about 180,000 pages that also had this DPL query on them due to a template. This page creation triggered a large number of parse jobs (so links could change from red to blue) all making the same, very slow DPL query, which began to overload the s3 DB, which snowballed. The caching mitigation introduced during the previous incident did not work properly as the query often did not complete prior to a timeout involved, preventing it from being cached. This was true even before the incident when the DB replicas were not under extreme load.
+
+Overall were 30 minutes of high latencies, failing to respond, or fatal errors, affecting wikis due to unavailable PHP-FPM workers. Based on traffic graphs the outage impacted to approximately a 15% of all incoming HTTP requests for wikis, those being either lost, suffering high latencies or 5XX error codes. The main impact was uncached requests, suffering a 0% availability during several moments of the outage, on all wikis.
+
+'''Impact''': For 30 minutes, 15% of requests from contributors on all wikis were responding either slowly, with an error, or not at all. There were also brief moments during which no readers could load recently modified or uncached pages.
+{{TOC|align=right}}
+
+== Timeline ==
+'''Prologue'''
+* 2020-09-07 and 2020-09-08: Following rapid bot imports (~100k pages in 1 day), DynamicPageList queries from ruwikinews caused problems on s3, though it did not lead to a sitewide outage. A summary of that incident is available at [[Phab:T262240#6449531|T262240#6449531]] (TODO: create proper incident report).
+* 2021-07-12 through 2021-07-26: [[n:ru:User:NewsBots|NewsBots]] imports/creates 3,182,955 pages to the Russian Wikinews.
+* 2021-07-24 through 2021-07-26 - ruwikinews starts logging "Async refresh failed for ruwikinews:DPLQuery:4ea73c61c64e57c48f89a3da9caee058cbc5888bc11d2597bcfa957dd542f4e4". This will spike during the incident. The hash corresponds to the DPL query used in the infobox included on pages in [[n:ru:Категория:В_мире]]. This happens when the query takes longer than 60 seconds, and indicates that the caching solution from the previous incident meant to reduce risk of cache stampedes is no longer working.
+* 2021-07-26: In the lead up to the incident, DPL queries are often taking up to 20 seconds to complete
+
+'''Main outage, all times in UTC.'''
+* 10:29: [[n:ru:Категория:В_мире]] is created by a logged out user [https://ru.wikinews.org/w/index.php?title=%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:%D0%96%D1%83%D1%80%D0%BD%D0%B0%D0%BB%D1%8B&logid=19137921]. This category is linked to on 179,385 pages, triggering a re-parse job for each page. Most of these pages have an infobox containing the problematic DPL query in question. During the incident much of the log entries have the request ID ''b0324fd-a93e-4aba-ab50-e58be6f2c38d'' from this edit.
+* 10:30: Database overload starts '''OUTAGE BEGINS'''
+* 10:30: Lots of the Parsoid jobs triggered by the edit to the category are reporting as failed.
+* 10:33: Page fire for both appserver and api_appserver clusters: <code>Not enough idle PHP-FPM workers for Mediawiki</code>
+* 10:34: Significant IRC alert spam ensues, comms move to #wikimedia-sre and #mediawiki_security
+* 10:35: "upstream connect error or disconnect/reset before headers. reset reason: overflow" on enwiki
+* 10:38: Manuel depools db2149, that seems the most affected DB ([https://sal.toolforge.org/log/QRJl4noB1jz_IcWuURo0 SAL entry])
+* 10:39: [[Phab:T287362|T287362]] filed by users unable to access arwiki,
+* 10:40: after a brief apparent recovery the load shifts to another DB
+* 10:42: Slow query identified as coming from <code>DynamicPageListHooks::processQuery</code>
+* 10:42: Link to previous incident from 2020-09 established ([[Phab:T262240|T262240]]), people involved in that ticket pinged on IRC
+* 10:46-10:49: Manuel slowly repools db2149
+* 10:48: Recommendation made to disable DynamicPageList on ruwikinews instead of increasing cache TTL
+* 10:50: Incident opened ([https://docs.google.com/document/d/15uw05hinO3ADNbbxKMPfpzxrTGkDBWifWY14-xu6lKU/edit?usp=sharing private Google Doc]).
+[[File:MariaDB traffic during 2021-07-26 DPL outage.png|thumb|MariaDB traffic during the outage showing a dramatic increase in rows read and number of open connections.]]
+* 10:51: Jaime sets the query killer on S3 replicas to 10 seconds for the MediaWiki user ([https://sal.toolforge.org/log/6mtx4noB8Fs0LHO5PaBK SAL entry])
+* 10:55: Amir disables DPL on ruwikinews ([https://sal.toolforge.org/log/7Rp04noBa_6PSCT9NDtq SAL entry])
+* 10:56: Icinga recoveries starts to be fired
+* 10:59: Database throughput back to normal levels '''OUTAGE ENDS'''
+* 11:01: Last Icinga recovery
+
+== Detection ==
+Icinga sent two pages at 10:33 for <code>Not enough idle PHP-FPM workers for Mediawiki</code> on the appserver and api_appserver clusters.
+
+The first user report on IRC appears to have been at 10:35 in #wikimedia-sre: <code><RhinosF1> Meta is down</code>.
+
+Because this was a full outage, every host was individually alerting and so were services that depend upon MediaWiki. Each appserver triggered two alerts, like:
+<pre>
+<icinga-wm> PROBLEM - Apache HTTP on mw2316 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Application_servers
+<icinga-wm> PROBLEM - PHP7 rendering on mw2316 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Application_servers/Runbook%23PHP7_rendering
+</pre> 
+
+icinga-wm sent 145 messages to #wikimedia-operations between 10:34 and 10:36 before being kicked off the Libera Chat network for flooding. That IRC channel was unusable and discussion was moved to #wikimedia-sre and then #mediawiki_security.
+
+== Conclusions ==
+
+=== What went well? ===
+* Automated monitoring detected the incident before humans did
+* Once the problematic query was identified, it was immediately linked to the previous incident
+* Once the extension was disabled + query killer running on s3, everything came back up
+
+=== What went poorly? ===
+* DPL had already been identified as problematic and the primary mitigation to limit concurrency of DPL queries ([[Phab:T263220|T263220]]) had never actually been deployed.
+* Users did not see the standard "Wikimedia error" screen, instead got a cryptic plaintext error message
+* icinga-wm spammed #wikimedia-operations to unusability and then flooded off
+* A formal incident was only opened two-thirds of the way through the outage
+* Harassment of sysadmins who were involved in incident response afterwards
+
+=== Where did we get lucky? ===
+* We did not get lucky.
+
+=== How many people were involved in the remediation? ===
+* ~7 SREs and 1 software engineer
+
+== Links to relevant documentation ==
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+== Actionables ==
+High-level discussion and brainstorming is happening in [[phab:T287380|T287380: Decide on the future of DPL]]. Out of that, some specific actionables have been identified: 
+
+* {{done}} {{Gerrit|708390}} Send queries to "vslow" database group
+* {{Done}} [[phab:T287916|T287916]] Disable DPL on wikis that aren't using it
+* {{stalled}} [[phab:T263220|T263220]] Limit concurrency of DPL queries
+*[[phab:T287983|T287983]] Raw "upstream connect error or disconnect/reset before headers. reset reason: overflow" error message shown to users during outage
+*{{In progress}} [[phab:T288180|T288180]] Investigate [[mw:Extension:GoogleNewsSitemap|Extension:GoogleNewsSitemap]] query performance
+**[[phab:T288227|T288227]] Add concurrency limiting to GoogleNewsSitemap using PoolCounter
+* Maybe it would be cool if job runners slow down if a DB overload is detected
+*Consider removing ordermethod=created as an unnecessary footgun
+* ...

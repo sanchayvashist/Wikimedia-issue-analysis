@@ -1,0 +1,145 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T316337
+| paged-num = 0
+| responders-num = 5
+| coordinators = [[User:Jcrespo|Jcrespo]]
+| start = 2022-08-26 09:56:00
+| end =  2022-08-26 10:13:00
+| metrics = no published SLOs
+| impact = For approximately 17 minutes, some users accessing Wikimedia services had their cookies/session headers being removed, causing them to be logged out and unable to log in, effectively making any logged action impossible. It didn't affect MediaWiki, but it affected other services, the one that was most noticeable was Phabricator.
+}}
+
+{{TOC|align=right}}
+After testing https://gerrit.wikimedia.org/r/c/operations/puppet/+/826785 in cp6016. ATS layer prevented Phabricator's (and theoretically, other services too, but it was less impacting) session cookies reaching the service's origin server. <code>474fb2d</code> didn't work as expected because it hit an ATS bug/missdocumented feature. Cookie data was stored in ts.ctx during <code>do_global_post_remap()</code> and restored in <code>do_global_cache_lookup_complete()</code> but for some reason ts.ctx gets wiped in the middle of those two hooks. 474fb2d also missed the step now performed in hide_cookie_store_response().
+
+After the change was reverted, login issues stopped and users were able to perform regular Phabricator logged-in actions.
+
+==Timeline==
+''All times in UTC.''
+
+* '''[09:56]''' <vgutierrez> !log testing https://gerrit.wikimedia.org/r/c/operations/puppet/+/826785 in cp6016 '''OUTAGE STARTS HERE'''
+* '''[10:07]''' <dcaro_away> anyone is doing anything with Phabricator? I'm getting logged out after any action. Several other users agree they are logged out and on log-in they get logged out again.
+* '''[10:16]''' ''Incident opened.''  Jcrespo becomes IC.
+* '''[10:13]''' <vgutierrez> !log stop testing https://gerrit.wikimedia.org/r/c/operations/puppet/+/826785 in cp6016 '''OUTAGE STOPS HERE''' (but may be affected for longer, as they realize later they are being logged out)
+* '''[10:18]''' <vgutierrez> if RhinosF1 is affected, my experiment is unrelated
+* '''[10:23]''' Jynus reaches out to Hashar (release engineering)
+* '''[10:26]''' People seem to be able to log in again, and stay logged
+* '''[10:29]''' Antoine texts Andre
+* '''[10:33]''' <andre> I don't see any pointers in https://phabricator.wikimedia.org/people/logs/query/all/ , but indeed a lot of folks seem to get stuck at "Login: Partial Login"
+* '''[10:35]''' The issue is identified as traffic-related: <vgutierrez> cp6016 was stripping the phab session cookie and returning a hit for an anonymous user
+* '''[10:35]''' The ticket is created https://phabricator.wikimedia.org/T316337
+* '''[10:47]''' ''Issue considered resolved.'' Followups to continue on ticket.
+
+==Detection==
+
+The issue was quickly pointed out by several people on IRC, in the SRE channel as it impacted highly visible ongoing work of several engineers and volunteers (dcaro, dhinus, jynus, claime).
+
+No alerts where sent because it only affected logged-in users, while the site acted normally for anonymous users.
+
+==Conclusions ==
+
+This probably should be written by the service owner, but in my understanding, a new test was setup on production with an undetected bug, causing traffic disruption (cookie filtering). I don't know if there is much else to do as the same bug is unlikely to hit again; except maybe enabling some kind of automatic monitoring detection of a similar issue.
+
+===What went well?===
+
+* MediaWiki ("the wikis") was not affected
+* It caused no long-term consequences (no user data lost, no permanent session lost)
+* Many people communicated quickly and effectively the issue
+
+===What went poorly?===
+
+* There was no monitoring setup to detect the issue
+* There was a long tail of checking if the issue was corrected after testing finished / it took a bit to understand the source
+
+==Links to relevant documentation==
+
+* https://docs.google.com/document/d/1Ka9MQB8OwdzAzJVfZuaIGo5VfnyRNRr_WxLPZ6YFMkE/edit
+* https://phabricator.wikimedia.org/T316338
+* https://gerrit.wikimedia.org/r/c/operations/puppet/+/826785
+
+==Actionables==
+
+* Improve monitoring to detect ability to log in/perform logged in actions on production Phabricator (?)
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|no pages
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|no pages
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|no pages
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+| Was the public status page updated? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|8
+|
+|}

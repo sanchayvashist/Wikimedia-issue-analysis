@@ -1,0 +1,97 @@
+
+
+== Summary ==
+
+
+During network maintenance, the Mailman runner process for delivering emails out of the queue crashed because it couldn't connect to the MariaDB database server and was not automatically restarted. As a result, Mailman continued to accept and process incoming email, but outgoing mail was queued. This was first reported in T331626, via Gerrit Reviewer Bot being broken. It was determined that the mediawiki-commits list was not delivering mail, leading to discovery of a growing backlog of 4k queued outgoing emails in Mailman. The mailman3 systemd service was restarted, causing all of the individual runner processes to be restarted, including the "out" runner, which began delivering the backlog. It took slightly over 5 hours for the backlog to be cleared.
+
+The network maintenance in question was T329073: eqiad row A switches upgrade. lists1001.wikimedia.org (the Mailman server) was not listed on the task but it was affected and downtimed (see T329073#8672655). icinga monitoring correctly detected the issue (see T331626#8680354), but was not noticed by humans.
+
+==Timeline==
+All times in UTC.
+
+*2023-03-07
+**14:09: lists1001 and 237 other hosts downtimed for switches upgrade (T329073#8672655)
+**14:20ish: network maintenance happens
+**14:35: "out" runner crashes OUTAGE BEGINS (see stack trace)
+**14:43: <+icinga-wm> PROBLEM - mailman3_runners on lists1001 is CRITICAL: PROCS CRITICAL: 13 processes with UID = 38 (list), regex args /usr/lib/mailman3/bin/runner https://wikitech.wikimedia.org/wiki/Mailman/Monitoring
+*2023-03-09
+**13:29 kostajh files T331626: reviewer-bot is not working
+**14:24 valhallasw says no email is coming in via the mediawiki-commits@ mailing list
+**15:15 JJMC89 files T331633: Not receiving posts or moderation messages, "The last message I received was at 7 Mar 2023 11:18:24 +0000, but I can see posts after that in list archives."
+**15:53 hashar posts about the large out queue backlog in Mailman: T331626#8680273 
+**16:03 marostegui restarts mailman3 systemd service, the out runner begins processing the queue
+**18:40 legoktm sends notification to listadmins@ mailing list
+**23:34 out queue reaches zero OUTAGE ENDS
+
+==Detection==
+Automated monitoring was the first to detect the issue, less than 10 minutes after the runner crashed:
+
+14:43: <+icinga-wm> PROBLEM - mailman3_runners on lists1001 is CRITICAL: PROCS CRITICAL: 13 processes with UID = 38 (list), regex args /usr/lib/mailman3/bin/runner https://wikitech.wikimedia.org/wiki/Mailman/Monitoring
+
+The correct alert fired, as it explicitly checks that the expected number of runner processes are actually running.
+
+However, it was not investigated until a human reported it, nearly 2 days later.
+
+==Conclusions ==
+
+===What went well?===
+
+*Automated monitoring correctly identified the issue pretty quickly
+
+===What went poorly?===
+
+* lists1001 was not marked as part of the row A switch upgrade so the service maintainers (term used loosely) weren't explicitly aware
+** We typically send potential downtime notifications (example) to listadmins when we know maintenance is expected.
+* No human noticed the alerting
+** The web service on lists1001 is often flaky, causing alerts that automatically recover so people may have begun to tune out the alerts.
+** Also there were a lot of alerts at that time because of multiple ongoing maintenance things, so it was also probably lost in the noise.
+* We don't actually monitor the size of the out queue (see script) because historically it did grow very large. We probably should, things are also much calmer these days.
+* Amir was on vacation
+
+===Where did we get lucky?===
+
+*Didn't get lucky
+
+==Links to relevant documentation==
+
+* Mailman/Monitoring
+
+Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.
+
+==Actionables==
+
+*Identify how lists1001 got missed during the eqiad row A switch upgrade preparation
+*Add monitoring to out queue size
+*Consider making the runner crashed monitoring page? If a runner crashes, it definitely needs manual intervention. And crashes are much much rarer than during the initial MM3 deployment. 
+*Someone should probably figure out why lists1001's web service is flaky and randomly going down
+
+Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.
+
+Add the #Sustainability (Incident Followup) and the #SRE-OnFIRE (Pending Review & Scorecard)  Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	   	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	   	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	   	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	no 	IRC alert sent but not noticed
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

@@ -1,0 +1,23 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+At 09:23 UTC, alerts indicated connectivity issues to the [[Eqsin cluster|Eqsin]] cluster in Singapore. At 09:31 UTC, @[[m:User:ERocca (WMF)|Ema]] deployed [https://gerrit.wikimedia.org/r/c/operations/dns/+/699910 a DNS change] to depool the Eqsin cluster. This diverted most of its assigned traffic to [[Ulsfo cluster|Ulsfo]], and some to [[Esams]]. At 09:35 UTC traffic started recovering, with traffic back to regular levels at 09:45 UTC. The 15-minute window is attributed to DNS caches expiring (e.g. at ISPs and on client devices). The connectivy issues were resolved later that day, and at 18:50 UTC @[[m:User:CMooney (WMF)|CMooney]] repooled the Eqsin cluster, with traffic back to regular levels in Eqsin by 19:00 UTC.
+
+'''Impact:''' For about 35 minutes from 09:20 to 09:45 UTC, the wikis were largely unreachable from countries normally served by the Singapore DC (including India, Hong Kong, and Japan).
+
+'''Documentation:'''
+[[File:Rl traffic by dc-20210615.png.png|thumb|Traffic by DC.]]
+
+* [https://github.com/wikimedia/operations-dns/blob/e4841851bef97124a3fd5beb09ffcc61fa49f59f/geo-maps#L7-L63 Wikimedia DNS: DC geo map]
+* [https://grafana.wikimedia.org/d/000000230/navigation-timing-by-continent?orgId=1&from=1623668400000&to=1623830400000&var-metric=responseStart&var-location=Asia&var-prop=p75 Grafana: Navigation Timing by Continent 2021-06-15]
+* [https://grafana.wikimedia.org/d/000000066/resourceloader?viewPanel=39&orgId=1&from=1623744000000&to=1623785400000 Grafana: Traffic volume by DC 2021-06-15]<!-- Reminder: No private information on this page! -->
+
+==Actionables==
+
+* Public tracking task: https://phabricator.wikimedia.org/T284986
+* TODO [[phab:T286554|Per-country Frontend Traffic dashboards T286554]]

@@ -1,0 +1,140 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T302340
+| paged-num = 0
+| responders-num = 3
+| coordinators = Ryan Kemper
+| start = 2022-02-22 17:47:00
+| end = 2022-02-22 19:27:00
+| metrics = updateQueryServiceLag ([https://grafana.wikimedia.org/d/000000489/wikidata-query-service?viewPanel=8&orgId=1&var-cluster_name=wdqs&from=1645548333076&to=1645559701497 Grafana])
+| impact = For about two hours, WDQS updates failed to be processed. As a consequence, bots and tools were unable to edit Wikidata during this time.
+}}
+
+WDQS updaters stopped processing updates in Codfw due to a failure with Flink in Codfw.
+
+The [[mw:Manual:Maxlag_parameter|API maxlag feature]], is configured on Wikidata.org to incorporate WDQS lag. The updateQueryServiceLag service exists to transfer this datapoint from Prometheus to MW. Because bots generally opt-in to be friendly and enable the "maxlag" parameter, and because the metric was configured to consider both Eqiad and Codfw, their edits were rejected for two hours.
+===Timeline===
+
+2022-02-22:
+
+'''17:30''' Search dev deploys a version upgrade (0.3.103) of the flink application to codfw for wdqs
+
+'''17:31''' The flink application is unable to restore from the savepoint
+
+'''17:51''' Search dev does not find any solution to unblock the situation and asks for a depool of wdqs@codfw (users no longer see stale results when hitting wdqs@codfw)
+
+'''17:52''' (traffic switched to eqiad) <code><gehel> !log depooling WDQS codfw (internal + public) - issues with deployment of new updater version on codfw</code>
+
+'''19:00''' wikidata maxlag alert is triggered eventhough codfw is depooled (known limitation: [[phab:T238751]])
+
+'''19:20''' wdqs@codfw is removed from the wikidata maxlag calculation (bots can resume editing)
+
+'''19:20''' Search dev rolls WDQS codfw flink state back to a previously saved [https://nightlies.apache.org/flink/flink-docs-release-1.14/docs/dev/datastream/fault-tolerance/checkpointing/ checkpoint ], restoring the processing of updates in WDQS. Within a few minutes lag catches up and the user impact resolves.
+
+'''19:25''' <code><ryankemper> !log T302330 `ryankemper@cumin1001:~$ sudo -E cumin '*mwmaint*' 'run-puppet-agent'` (getting https://gerrit.wikimedia.org/r/c/operations/puppet/+/764875 out)</code>
+
+'''19:27''' <code>(RdfStreamingUpdaterFlinkJobUnstable) resolved: WDQS_Streaming_Updater in codfw (k8s) is unstable - https://wikitech.wikimedia.org/wiki/Wikidata_Query_Service/Streaming_Updater  - https://alerts.wikimedia.org</code>
+
+'''20:00''' WCQS version 0.3.104 is deployed, which includes a fix for WCQS failures https://gerrit.wikimedia.org/r/c/wikidata/query/rdf/+/764864. (Note: https://gerrit.wikimedia.org/r/c/wikidata/query/rdf/+/764864 addressed some WCQS failures but was not the primary cause of the WDQS failures)
+
+2022-02-23
+
+'''14:00''' investigation of the root cause shows that flink can no longer start properly in k8s, the app was restarted in yarn
+
+'''18:00''' the flink app is still unable to run from k8s@codfw
+
+2022-02-24
+
+'''10:00''' Search devs link the root cause to a poor implementation of the swift client protocol and decides to switch to a S3 client, the app will remain running in YARN while we move away from this swift client.
+
+2022-03-08 
+
+'''10:00''' The flink app is able to start on k8s@codfw thanks to the switch to the S3 client protocol
+
+===Documentation===
+*https://grafana.wikimedia.org/d/000000489/wikidata-query-service?viewPanel=8&orgId=1&var-cluster_name=wdqs&from=1645548333076&to=1645559701497 Graph of affected lag
+
+==Actionables==
+*https://phabricator.wikimedia.org/T238751 (pre-existing ticket) would have prevented the period in which Wikidata edits could not get through despite the affected hosts having already been depooled
+
+
+<mark>TODO: Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]] Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|unclear if this paged, please update if known
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|unclear if this paged, please update if known
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|unclear if this paged, please update if known
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|8
+|
+|}

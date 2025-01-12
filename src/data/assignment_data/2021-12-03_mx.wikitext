@@ -1,0 +1,218 @@
+{{irdoc|status=final}}
+== Summary==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+| '''Incident ID'''
+|2021-12-03 mx
+|'''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+| [[phab:T297127|T297127]]
+|'''UTC End Timestamp'''
+|YYYY-MM-DD hh:mm:ss
+|-
+| '''People Paged'''
+|<amount of people>
+|'''Responder Count'''
+|<amount of people>
+|-
+| '''Coordinator(s)'''
+|Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+
+% error budget
+|-
+|'''Impact:'''
+| colspan="3" |For about 24 hours, a portion of outgoing email from wikimedia.org was delayed in delivery. This affected staff Gmail, and Znuny/OTRS/Phabricator notifications. No mail was lost, it was eventually delivered. 
+|}
+On November 24th the Linux kernel on one of our mail servers was upgraded. [https://sal.toolforge.org/log/qkFVUX0B8Fs0LHO5688M]
+
+Then on November 30th changes were made to prioritization of mail servers used for wiki mail which sent more traffic than before to this server. [https://gerrit.wikimedia.org/r/c/operations/puppet/+/742757]
+
+Due to a kernel bug in the iptables conntrack module packets from our mail server towards Google mail servers started to be dropped. [https://www.spinics.net/lists/stable/msg509296.html]
+
+Outgoing mail became stuck in the outgoing queue. [https://grafana.wikimedia.org/d/000000451/mail?orgId=1&from=1638051489230&to=1638576494254]
+
+After a while the number of mails in the queue started to trigger monitoring alerts [https://icinga.wikimedia.org/cgi-bin/icinga/extinfo.cgi?type=2&host=mx2001&service=exim+queue], [https://icinga.wikimedia.org/cgi-bin/icinga/notifications.cgi?host=mx2001&ts_start=1638748800&ts_end=1638820953&limit=0&type=0&order=new2old&timeperiod=lastweek&start_time=2021-12-06+00%3A00%3A00&end_time=2021-12-06+20%3A02%3A33] and internal users started to report to ITS about issues with mail.[https://phabricator.wikimedia.org/T297017]
+
+SRE started to investigate and identified first the timeouts as a cause and then after some debugging that the cause for that was the firewall suddenly dropping packets. [https://phabricator.wikimedia.org/T297017#7547326]
+
+A manual fix was applied to add extra firewall rules to allow these dropped packets. (ip6tables -I INPUT -s 2620:0:861:102:10:64:16:8 -j ACCEPT)
+
+After this the outgoing mail stuck in the queue started to be sent out but it took some time to catch up. [https://grafana.wikimedia.org/d/000000451/mail?viewPanel=3&orgId=1&from=1638571161474&to=1638579596286]
+
+At this point it was still unclear what the further root cause of the firewall change was but mail was being sent out again normally. SRE informed ITS about the ongoing process.
+
+After further debugging, finding other bug reports and going through server admin logs it became clear that the change correlated nicely to the latest reboot which was done for a kernel upgrade.
+
+Finding this and after the queue was fully processed SRE proceeded to deactivate the affected mail server and rebooted it in order to downgrade it to the previous kernel version.[https://sal.toolforge.org/log/wA7vgn0B1jz_IcWuoPxQ]
+
+While doing this another unrelated issue appeared, the ganeti VM that is the mail server did not come back from the reboot.[https://sal.toolforge.org/log/zXEBg30B8Fs0LHO5knFE]
+
+It failed to get an IP on its network interface and was online but could not be reached via SSH and had no networking at all. [https://tenor.com/view/bryan-cranston-replace-the-bulb-malcolm-in-the-middle-kitchen-hal-gif-11562300]
+
+After a little while SRE identified this as a known issue with device renumbering on ganeti VMs and was able to get the server back up by editing network configuration manually via root console followed by another reboot.
+
+At this point the server was now back up with the previous kernel version (5.10.0-8) and tests were made to see if the issue was gone. It was confirmed mail could be sent again with that kernel!
+
+Some changes that had been reverted in Gerrit were re-reverted and a decision was made to keep the mailserver deactivated over the weekend.
+
+Incident was closed, of course minus the follow-ups.{{TOC|align=right}}
+
+==Timeline==
+
+*2021-11-24 mail server mx2001 gets rebooted for a maintenance kernel upgrade
+*(a bug in kernel 5.10.0-9 starts to affect firewall rules on the server but we don't know this yet because it has very low no traffic))
+*2021-11-30 as part of other work, disabling LDAP callouts, more traffic than before is shifted to mx2001 [https://gerrit.wikimedia.org/r/c/operations/puppet/+/742757]
+*2021-12-02 10:24:02 - Icinga notices the mail queue size grew over the alerting threshold of 2000 (is: 4013) and notifies IRC about it
+*2021-12-02 11:56:26 - icinga notifies a second time (but only to IRC) that mail queue is now at  4042
+* 2021-12-03 16:48 - ITS creates ticket T297017 because “Several staff members are getting intermittent Google Mail bounce backs.”
+*2021-12-03 21:11 SRE investigates, identifies issue is timeout to Google servers. aspmx.l.google.com [142.250.114.27] DT=10m: SMTP timeout after end of data
+*2021-12-03 22:10 issue is escalated to an incident
+* 2021-12-03 23:11 SRE finds dropped packets, applies manual ip6tables command, confirms it fixes it, reverts manual fix, shortly after we disable puppet and the queue starts to go down (slowly)
+*2021-12-03 ~ 23:18 We find out firewall rule is missing from RELATED,ESTABLISHED, shortly after that the issue appears to be in conntrack
+*2021-12-03 ~ 23:28  we keep watching the queue size go lower, start to draft a response to ITS, keep debugging to identify what caused the change and becomes more and more clear it matches with the recent kernel upgrade. We try to guess how long it might take until the queue is fully sent.
+*2021-12-04 ~ 00:22 we are discussing how to continue once the queue is down to 0. Decide to keep exim deactivated, reload ferm to close the holes we opened up manually
+*2021-12-04 ~ 00:26 - OTRS starts alerting with systemd alerts, clamav randomly died after trying to scan some Windows malware. We get distracted and fix that too by restarting it.
+*2021-12-04 ~ 00:42 - mail queue finished catching up, mail had been sent out, we stopped exim
+*2021-12-04 ~ 00:46 - we decide to test rebooting the server with the previous kernel to confirm the kernel bug theory
+*2021-12-04 ~ 00:55 - server does not come back from reboot, does not get IP on interface, is affected by ganeti device renumbering bug
+*2021-12-04 - 01:10 - we manage to bring the server back up after connecting via ganeti console and root password, manually editing /etc/network/interfaces and replacing ens5 with ens13, rebooting again, and this time with the previous kernel version
+*2021-12-04 - 01:11 - we are able to confirm sending out mail works with this kernel
+*2021-12-04 - 01:14 - server is reachable via SSH again but spamd did not start, ferm did not start and a stale if-up, we fix those as well, iptables rules are in place again
+*2021-12–04 - 01:26 - we decided to keep exim disabled over the weekend, masked the exim service again
+*2021-12-04 - 01:32 - incident is declared to be over, of course pending follow-ups
+*2021-12-07 - The long-term fix was to revert bullseye hosts from 5.10.70 to a previous kernel version [https://phabricator.wikimedia.org/T297180]
+*2021-12-08 - mx2001 is back in service [https://phabricator.wikimedia.org/T297128]
+
+== Detection==
+It was detected by Icinga at: "(2021-12-02 10:24:02 - Icinga notices the mail queue size grew over the alerting threshold of 2000 (is: 4013) and notifies IRC about it)."
+
+This could be seen on IRC and on the Icinga web UI but did not send direct SMS or emails to specific people.
+
+A follow-up will be to change this and make it page SRE ([[phab:T297144]]).
+
+In parallel it was noticed by wikimedia.org staff who reported to ITS who created [[phab:T297017]].
+
+[https://icinga.wikimedia.org/cgi-bin/icinga/notifications.cgi?host=mx2001&ts_start=1638748800&ts_end=1638820953&limit=0&type=0&order=new2old&timeperiod=lastweek&start_time=2021-12-06+00%3A00%3A00&end_time=2021-12-06+20%3A02%3A33 Icinga - Alert Notifications for mx2001]
+
+[https://icinga.wikimedia.org/cgi-bin/icinga/extinfo.cgi?type=2&host=mx2001&service=exim+queue Icinga - exim queue size check on mx2001]
+
+==Conclusions ==
+*Monitoring exists but notifications need to be worked on.
+* More specifically test sending out mail after reboots/upgrades on mail servers.
+
+===What went well?===
+*No mail was actually lost.
+*Several people around working together
+===What went poorly?===
+*Monitoring alerted us about growing queue size but we did not get or see notifications for it. At least not before ITS had to create a ticket.
+*Unrelated problems like the issues when just trying to reboot the VM
+===Where did we get lucky?=== 
+*People were around with sufficient knowledge.
+*When the server did not come back from reboot we already knew about the issue we sometimes ran in with ganeti VMs. Finding and fixing it would otherwise have taken longer.
+
+===How many people were involved in the remediation?===
+8 SRE<ref>SRE count: <code>cut -d ">" -f1 incident.txt  | cut -d " " -f3 | sort | uniq</code></ref> and (at least) one person from WMF ITS (IT Services team).
+
+==Links to relevant documentation==
+*https://wikitech.wikimedia.org/wiki/Exim#Troubleshooting_%22exim_queue_warning%22_alerts
+*Full IRC logs from start to end of the incident in Google doc called "IRC-logs-20211203-mx-incident" visible to SRE
+*Incident doc in Google docs, visible to SRE
+
+==Links to related tickets==
+
+*[[phab:T297017]] - MX record issue on mx2001.wikimedia.org
+*[[phab:T297127]] - Incident: 2021-12-03 mx2001->Gmail delivery issues
+*[[phab:T297128]] - Bringing mx2001 back into service
+*[[phab:T297144]] - large MX queues should page
+*[[phab:T297180]] - Revert 5.10.70 from bullseye hosts
+
+==Links to related changes==
+*[[gerrit:743423]]
+*[[gerrit:739826]]
+*[[gerrit:742757]]
+*[[gerrit:743527]]
+=Scorecard=
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no) 
+|0
+|This did not page
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|This did not page
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|0
+|This did not page
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+| Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" |Total score
+|7
+|
+|}
+
+==Actionables==
+
+*[[phab:T297128]] - Bringing mx2001 back into service
+*[[phab:T297144]] - large MX queues should page
+
+<references />

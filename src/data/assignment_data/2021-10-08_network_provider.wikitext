@@ -1,0 +1,127 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID'''
+|2021-10-08 network provider
+|'''UTC Start Timestamp:''' 
+|YYYY-MM-DD hh:mm:ss 
+|-
+|'''Incident Task'''
+| https://phabricator.wikimedia.org/T292792 
+|'''UTC End Timestamp''' 
+|YYYY-MM-DD hh:mm:ss 
+|-
+|'''People Paged'''
+|<amount of people>
+|'''Responder Count'''
+|<amount of people>
+|-
+| '''Coordinator(s)'''
+|Names - Emails 
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget
+|-
+|'''Summary:''' 
+| colspan="3" |For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions. 
+|}Around 16:11 UTC our (non-paging) monitoring and users reported connectivity issues to and from our Eqiad location. Traceroutes showed a routing loop in a provider's network.
+
+At 16:19 UTC, using the provider's APIs, we asked the provider to stop advertising the prefixes for Eqiad on our behalf.
+
+At 16:24 UTC, the first reports of recoveries arrived as the change propagated through the [[:en:Default-free_zone|DFZ]].
+
+Unfortunately, due to the preponderance of the Eqiad impact and its recovery, we didn't notice that it also impacted users from Russia to reach the wikis through Esams.  We also didn't receive any [[NEL]] reports from most Russia users until 16:24 or later, as the location we use for NELs about Esams is itself Eqiad. 
+
+At around 17:15 UTC, our monitoring shows a full recovery, indicating the issue being resolved upstream.
+
+'''Impact''': For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions.
+
+Due to the span of this provider's network, the further a client is from Eqiad the more likely they will be using that provider to reach our network and thus could be impacted.<!-- Reminder: No private information on this page! -->
+
+'''Documentation''':[[File:Screenshot 2021-10-08 at 08-23-35 NEL (Network Error Logging) - Elastic.png|none|thumb|[https://logstash.wikimedia.org/goto/93cb07d63964e0271ecf8eece8845a7b Logstash: NEL reports (restricted)]]]
+*[https://grafana.wikimedia.org/d/K1qm1j-Wz/ripe-atlas?var-datasource=eqiad%20prometheus%2Fops&var-target_site=All&var-ip_version=ipv4&var-country_code=All&var-asn=All&from=1633620224947&to=1633632035019 Grafana: Ripe Atlas]
+=Scorecard=
+{| class="wikitable"
+!
+!Question 
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Information not logged, scoring 0
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|No page occurred
+|-
+| Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|No page occurred
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|No page occurred
+|-
+! rowspan="5" |Process 
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+| Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|No mention of previous occurrence, scoring 0
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no) 
+|0
+|NEL paging which was deployed shortly after
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|0
+|NEL receive was degraded due to issues in eqiad which masked issue at other site 
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|6
+|
+|}
+==Actionables==
+*[[phab:T292792|2021-10-07 network provider issues causing all Wikimedia sites to be unreachable for many users]]
+**[[gerrit:c/operations/puppet/+/727594|patch to make NEL alert paging]]
+*Request RFO from provider

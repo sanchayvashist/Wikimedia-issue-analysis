@@ -1,0 +1,159 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID'''
+|2021-10-22 eqiad return path timeouts 
+| '''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss 
+|-
+| '''Incident Task'''
+|https://phabricator.wikimedia.org/T295152
+|'''UTC End Timestamp'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged''' 
+|<amount of people>
+| '''Responder Count'''
+| <amount of people>
+|-
+|'''Coordinator(s)'''
+|Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget 
+|-
+|'''Summary:'''
+| colspan="3" | For ~40 minutes (from 20:06 to 20:48 UTC), clients users who geographically reach us via Eqiad had trouble connecting and received timeout errors. Based on traffic dashboards, we lost about 7K requests/second. Recovery of the incident included temporarily depooling Eqiad to route clients to a different datacenter, which increases latencies. After 10 minutes, Eqiad was ready and repooled as well.
+|}Users had trouble connecting to the [[Eqiad cluster|Eqiad datacenter]] (wikis and CDN, as well as developer services like Phabricator and Gerrit) because of a return path issue after datacenter maintenance (see [[phab:T293726#7454820|T293726#7454820]] for an explanation of how the maintenance went wrong). Because of other networking maintenance taking place at the same time it took a while to diagnose the underlying issue and gain confidence that we had fixed the correct issue. In addition, the alert only went out over IRC, not the VictorOps pager because about half of our outbound paths to the Internet were broken due to the outage, which affected the ability for the alert to reach our external alert vendor. 
+[[File:2021-10-22 Varnish request rate during outage.png|thumb|Varnish traffic chart showing dip in overal traffic during outage and then when eqiad was temporarily depooled.]]
+
+'''Impact''': For ~40 minutes (from 20:06 to 20:48 UTC), clients users who geographically reach us via Eqiad had trouble connecting and received timeout errors. Based on traffic dashboards, we lost about 7K requests/second. Recovery of the incident included temporarily depooling Eqiad to route clients to a different datacenter, which increases latencies. After 10 minutes, Eqiad was ready and repooled as well.
+
+[[File:2021-10-22 NEL chart showing outage.png|center|thumb|1154x1154px|[[Network Error Logging]] dashboard showing the outage. The initial recovery happens at 20:42 but regresses minutes later because the router change was not fully committed.]]
+
+== Timeline ==
+* 19:38 Icinga reports issues with 1 interface going down on cr3-ulsfo
+* 19:39 Icinga reports 2 interfaces down on cr2-eqord and 1 down on cr2-codfw
+* 19:50 Telia mails us saying “we Suspected Cable fault in St Louis and your circuits are affected” and lists multiple circuits (turned out to be unrelated, red herring in the investigation)
+* 20:06 '''a cable is patched in Eqiad ([[Phab:T293726#7452237|T293726#7452237]]) - incident & user impact begin here'''
+* 20:09 <AntiComposite> reports of timeouts from a few users on Discord
+* 20:10 <dontpanic> oh, I'm not the only one
+* 20:14 Icinga starts reporting RIPE Atlas probes starting to be down
+* 20:15 <mutante> XioNoX: users report issues right after a cable was patched in Eqiad but things work for me
+* 20:15 <mutante> jclark-ctr: are you working with someone on that cable thing?
+* 20:15 '''<+icinga-wm> PROBLEM - Too high an incoming rate of browser-reported Network Error Logging events #page on alert1001 is CRITICAL: type=tcp.timed_out https://wikitech.wikimedia.org/wiki/Network_monitoring%23NEL_alerts https://logstash.wikimedia.org/goto/5c8f4ca1413eda33128e5c5a35da7e28'''
+* 20:24 Incident opened, Kunal becomes IC
+* ... mostly looking into Telia transport links being down (red herring)
+* 20:28 <bblack> the transport circuit, the interface appears to be down, so that's good at that level
+* 20:32 <cdanis> saturation on transport links shouldn't be causing these flavors of NELs nor the RIPE Atlas alert
+* 20:35 <bblack> https://librenms.wikimedia.org/device/device=2/tab=port/port=11600/ <bblack> equinix peering in eqiad, there's a dropoff in traffic, probably from telia fiber cut impacting other peers there?
+* 20:39 < bblack> I think we've got some peers over that exchange which we're still advertising in one or both directions with, but are affected by telia somehow and the peering traffic is borked. 
+* 20:41 < cdanis> it's a return path issue for sure
+* 20:41 < XioNoX> !log disable sessions to equinix eqiad IXP ([https://sal.toolforge.org/log/GIK8qXwB8Fs0LHO5kUJR SAL entry]) '''user impact temporarily ends'''
+* 20:41 <+icinga-wm> RECOVERY - BGP status on cr2-eqiad is OK: BGP OK - up: 74, down: 0, shutdown: 0 https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status
+* 20:42 <greg-g> it's back <greg-g> my mtr is happy now
+* 20:42 multiple users start to report things are working now and they can reach Gerrit
+* 20:45 <greg-g> can't connect to the eqiad lb again '''change auto-rolls-back on the router; user impact begins again'''
+* 20:45 <+icinga-wm> RECOVERY - Too high an incoming rate of browser-reported Network Error Logging events #page on alert1001 is OK: All metrics within thresholds. https://wikitech.wikimedia.org/wiki/Network_monitoring%23NEL_alerts https://logstash.wikimedia.org/goto/5c8f4ca1413eda33128e5c5a35da7e28
+* 20:46 <cdanis> XioNoX: you did commit confirmed but didn't confirm <cdanis> it auto rolled back
+* 20:46 Brandon depools eqiad in DNS ([https://sal.toolforge.org/log/bCTDqXwB1jz_IcWuZmcx SAL entry])
+* 20:47 <XioNoX> cdanis: er, yeah commiting for real  '''user impact ends again and stays fixed'''
+* 20:48 users report recoveries, again
+* 20:49 <bblack> it takes several minutes for most to see a real impact from the dns-level depool, so any immediate recoveries are probably from re-committing the exchange fix
+* 20:50 <mutante> are we sure this has nothing to do with it?  "eqiad: patch 2nd Equinix IXP - https://phabricator.wikimedia.org/T293726 (Jclark-ctr) Cable has been run shows link."
+* 20:52 <XioNoX> yeah, that's most likely it
+* 20:52 <cdanis> bug post is at 20:06 <cdanis> the NEL reports start at 20:06 exactly
+* 20:54 <XioNoX> I disabled the interface on cr1, going to re-enabled the active on on cr2 ([https://sal.toolforge.org/log/ZILIqXwB8Fs0LHO5o1Ci SAL entry])
+* 20:57 '''Cause identified and fixed, incident over'''
+* 20:57 <bblack> !log re-pooling eqiad in DNS ([https://sal.toolforge.org/log/VSTLqXwB1jz_IcWutHH7 SAL entry])
+=Scorecard =
+{| class="wikitable"
+!
+!Question
+!Score 
+! Notes
+|-
+! rowspan="5" |People 
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no) 
+|0
+|NEL page went out via batphone
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|routed to batphone (all awake SRE)
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|0
+|
+|-
+! rowspan="5" | Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|unclear, some actions missing tasks
+|-
+| Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no) 
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+| Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|7
+|
+|}
+== Actionables ==
+* [[phab:T293726|T293726]]: Investigate & document why adding a new patch cable to the Equinix IX ports caused return path issues
+* [[phab:T294166|T294166]]: NEL alert included #page in IRC but did not page through VictorOps (and then it did page through VO, at 21:07)
+** This was because our outbound path to any internet destinations best reached via the Equinix IX were broken from (half of?) eqiad for the duration of the incident.
+**Icinga also missed reporting when "BGP status on cr2-eqiad" went down, only reporting its recovery, our tentative theory is that it was also affected by the networking issues.
+**Working around this is difficult but we should think about what to do.
+* Remind people that using Klaxon when they're relatively confident something is wrong is preferred to waiting for automated monitoring to page.
+** It's possible that Klaxon would also not work for the same users -- Klaxon is hosted in eqiad on alert1001.wikimedia.org, with the codfw installation being a passive backup host.
+**It would have required someone on IRC to relay the issue through Klaxon, which had happened, just lack of actually using the tool.
+*Have an incident replay, looking at both the technical aspects as well as procedural.
+*[[phab:T295672|T295672]]: Use next-hop-self for iBGP sessions

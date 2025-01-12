@@ -1,0 +1,97 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T309957
+| paged-num = 0
+| responders-num = 7+
+| coordinators = -
+| start = 2022-06-30 15:23:00
+| end = 2022-06-30 15:41:00
+| impact = For approximately 18 minutes, servers in the A4-codfw rack lost network connectivity. Little to no external impact as affected services were either inactive in Codfw or had local redundancy.
+}}
+
+Network connectivity for the A4 codfw server rack went down due to full power loss of its switch. This caused lots of alert spam, but otherwise it had very little to no impact on users due to services not being pooled on codfw or redundancy working as intended.
+
+This was very similar incident to [[Incidents/2022-06-21 asw-a2-codfw accidental power cycle]] (bump wrong cable on switch side again). See that page for more details.
+
+After the secondary power cord was properly connected, connectivity recovered with no known issues. Power maintenance on that rack finished at 15:50.
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|Not paging
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|Not paging
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|Not paging
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|No working doc
+|-
+|Was the public status page updated?
+|no
+|not user facing
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

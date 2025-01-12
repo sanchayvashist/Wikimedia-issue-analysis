@@ -1,0 +1,153 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T323094
+| paged-num = 0
+| responders-num = 
+| coordinators = 0
+| start = 2022-11-15 04:51:00
+| end = 2022-11-15 04:56:00
+| metrics = No relevant SLOs exist - 5xx errors graph shows the impact https://grafana.wikimedia.org/d/-K8NgsUnz/home?orgId=1&from=1668487382007&to=1668488908178&viewPanel=8
+| impact = For about 5min, users in the APAC region (using eqsin) could have been served 5xx errors instead of the requested page.
+}}
+
+
+<!-- Reminder: No private information on this page! -->Connecting a new server to our eqsin top of rack switches triggered a Juniper [https://prsearch.juniper.net/problemreport/PR1080132 bug]  which caused one of its processes to be killed and interrupting traffic transiting through the switch. This event caused also a Virtual-Chassis master switchover extending the outage. The process got automatically re-started and the situation stabilized by itself in about 5min.
+
+{{TOC|align=right}}
+
+==Timeline==
+<mark>Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.</mark>
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC.''
+
+*04:51 (TODO) '''OUTAGE BEGINS'''
+*00:04 (Something something)
+*00:06 (Voila) '''OUTAGE ENDS'''
+*00:15 (post-outage cleanup finished)
+
+<!-- Reminder: No private information on this page! -->
+<mark>TODO: Clearly indicate when the user-visible outage began and ended.</mark>
+
+==Detection==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* The situation stabilized by itself
+* Juniper was able to match the crash to a known bug (even though our code version is not supposed to be vulnerable to this bug)
+* automated monitoring detected the incident
+
+===What went poorly?===
+
+* Nobody was paged despite the outage to be user impacting <mark>to be verified</mark>
+* Nobody present during the outage opened a task documenting what happened
+* Such improbable bug
+
+===Where did we get lucky?===
+
+*
+
+==Links to relevant documentation==
+
+* [[Network monitoring#virtual-chassis crash]]
+
+==Actionables==
+
+* Upgrade POPs asw to Junos 21 - https://phabricator.wikimedia.org/T316532
+* We're phasing out virtual chassis in the new POP network designs (cf. drmrs). Even though such bugs might always be a possibility, the new design is more resilient (each switch is independent)
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|no
+|
+|-
+|Were fewer than five people paged?
+|no
+|no pages
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|no pages
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|no pages
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+| Was the public status page updated? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|no
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|auto-resolved
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

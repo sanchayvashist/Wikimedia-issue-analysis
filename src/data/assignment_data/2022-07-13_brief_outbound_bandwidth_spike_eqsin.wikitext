@@ -1,0 +1,22 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 10
+| responders-num = 3
+| coordinators = Filippo
+| start = 2022-07-13 13:42
+| end = 2022-07-13 14:09
+| impact = For 20 minutes, there was a small increase in error responses for images served from the Eqsin data center (Singapore).
+}}
+
+Brief outbound bandwidth spike for upload in [[Eqsin data center|Eqsin dc]]. Recovered by itself.
+
+* [https://docs.google.com/document/d/15pEoJM05a8oS2LHAyq3F0ZHMpvGUO3dS6aANAzl1x38/edit# Restricted details].
+* [https://grafana.wikimedia.org/d/-K8NgsUnz/home?orgId=1&from=1657717200000&to=1657722600000 Grafana]
+
+==Actionables==
+
+* [[phab:T310997|T310997]] Improve webrequest log
+* https://gerrit.wikimedia.org/r/c/operations/puppet/+/768723

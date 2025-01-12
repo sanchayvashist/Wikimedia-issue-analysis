@@ -1,0 +1,18 @@
+ 
+
+==Summary==
+At 09:23 UTC, alerts indicated connectivity issues to the Eqsin cluster in Singapore. At 09:31 UTC, @Ema deployed a DNS change to depool the Eqsin cluster. This diverted most of its assigned traffic to Ulsfo, and some to Esams. At 09:35 UTC traffic started recovering, with traffic back to regular levels at 09:45 UTC. The 15-minute window is attributed to DNS caches expiring (e.g. at ISPs and on client devices). The connectivy issues were resolved later that day, and at 18:50 UTC @CMooney repooled the Eqsin cluster, with traffic back to regular levels in Eqsin by 19:00 UTC.
+
+Impact: For about 35 minutes from 09:20 to 09:45 UTC, the wikis were largely unreachable from countries normally served by the Singapore DC (including India, Hong Kong, and Japan).
+
+Documentation:
+
+
+* Wikimedia DNS: DC geo map
+* Grafana: Navigation Timing by Continent 2021-06-15
+* Grafana: Traffic volume by DC 2021-06-15
+
+==Actionables==
+
+* Public tracking task: https://phabricator.wikimedia.org/T284986
+* TODO Per-country Frontend Traffic dashboards T286554

@@ -1,0 +1,107 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T310557
+| paged-num = 26 (twice)
+| responders-num = 10
+| coordinators = lsobanski
+| start = 2022-07-03 11:17:00
+| end = 2022-07-03 11:33:00
+| impact = For 16 minutes, edits and previews for pages with Score musical notes were too slow or unavailable.
+}}
+[[File:Shellbox Grafana 2022-07-03.png|thumb|Shellbox Grafana dashboard]]
+An increase in Score requests (musical note rendering) from Parsoid overwhelmed the Shellbox service. This was mitigated by allocating more k8s pods to Shellbox. The overload took place from 11:17 to 11:33.
+
+From the Grafana dashboard, we see that a majority of requests took over 5,000ms (5s) instead of less the usual 10ms (0.01s), and for two minutes 11:25-11:27 requests actually failed with HTTP 503 instead.
+
+From the Logstash dashboard, we measure approximately 35,000 failed requests during this time. Of which 99.9% were from Parsoid, for de.wikipedia.org requests that render musical notes through the Score extension. 26K received HTTP 503, and 9K received HTTP 504. The remaining 0.1% were edits or pageviews calling Shellbox for syntax highlighting. 
+
+See [[Incidents/2022-07-11 Shellbox and parsoid saturation|2022-07-11 Shellbox and parsoid saturation]] for re-occurrence and follow up action items.
+[[File:Logstash shellbox 2022-07-03.png|thumb|Shellbox service errors in Logstash]]
+'''Documentation''':
+*[https://grafana.wikimedia.org/d/RKogW1m7z/shellbox?orgId=1&var-dc=eqiad%20prometheus%2Fk8s&var-service=shellbox&var-namespace=shellbox&var-release=main&from=1656843600000&to=1656852600000 Shellbox requests dashboard]
+
+==Actionables==
+
+*[[phab:T310557|T310557: Improving Shellbox resource management]]
+*[[phab:T312319|T312319: Reduce Lilypond shellouts from VisualEditor]]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

@@ -1,0 +1,45 @@
+
+
+==Summary==
+
+
+
+The TLS certificate for etcd.eqiad.wmnet expired. Nginx servers on conf* hosts use this certificate, and thus conftool-data could not sync between conf hosts anymore. During this time, puppet-merge returned sync errors. labweb (wikitech) hosts alerted because of failed timers/jobs.
+
+We got paged by monitoring of "Etcd replication lag". We had to renew the certificate but it wasn't a simple renew, because additionally some certificates had already converted to a new way or creating and managing them while others had not. Our two core data centers were in different states. Only Eqiad was affected by lag and sync errors. After figuring this out, we eventually created a new certificate for etcd.eqiad using cergen, copied the private key and certs in place and reconfigured servers in Eqiad to use it. After this, all alerts recovered.
+
+Documentation:
+*https://grafana.wikimedia.org/d/Ku6V7QYGz/etcd3?orgId=1&from=1651361014023&to=1651428319517
+*https://logstash.wikimedia.org/goto/1e1994e64e8c23ef570fb19f562bf08b
+
+==Actionables==
+Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.
+
+*T307382 (Modernize etcd tlsproxy certificate management)
+*T307383 (Certificate expiration monitoring)
+* https://gerrit.wikimedia.org/r/q/topic:etcd-certs (5 Gerrit changes)
+
+TODO: Add the #Sustainability (Incident Followup) and the #SRE-OnFIRE (Pending Review & Scorecard) Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	1    	probably? do we actually go through the last 5 incidents? Which list to use?
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	combined knowledge of both responders did it
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	1    	15 paged, 2 responded
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	0    	Are any pages routed to subteams yet?
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	0    	weekend and late
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	0    	no public impact that would have made it useful
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	0    	no public impact that would have made it useful
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	https://phabricator.wikimedia.org/T302153 was reused, as well as follow-up task https://phabricator.wikimedia.org/T307382
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	1    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	0    	unsure though, maybe but before we made reports for them
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	0    	could have had one to migrate eqiad certs to cergen
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	1    	IRC
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	Yes, but only when cert was already expired. Should have had alerting before that.
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	1    	
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	0    	
+Total score	Total score                                                                                                                                              	8    	

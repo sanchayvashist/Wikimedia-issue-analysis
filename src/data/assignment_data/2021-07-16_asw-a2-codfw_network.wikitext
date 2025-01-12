@@ -1,0 +1,80 @@
+{{irdoc|status=final}}
+== Summary ==
+asw-a2-codfw, the switch handling the network traffic of rack A2 on codfw became unresponsive rendering 14 hosts unreachable. Besides losing the 14 hosts hosted on rack A2, two additional load balancers lost access to codfw's row A. Services with hosts in the impacted row (such as Swift and various mw-api servers) remained available for clients due to automatic failover and load balancing to remaining hosts. While mw-api remained available for end-users and external clients, the impacted Restbase load-balancer remained pooled causing Restbase to continue to try (and fail) to reach mw-api hosts. Thus, mobileapps API and cxserver API (which rely on Restbase) returned errors to clients for some time.    
+
+Several other services were switched over from Codfw to Eqiad: Maps Tile Service and Wikidata Query Service.   
+
+'''Impact''': For about 1 hour the Restbase, mobileapps, and cxserver services were serving errors. Reduced capacity of high-traffic1 load balancers and MediaWiki servers in Codfw.
+{{TOC|align=right}}
+
+== Timeline ==
+'''All times in UTC.''' '''Friday 16th'''
+* 13:16 asw-a2-codfw becomes unresponsive '''OUTAGE BEGINS'''
+* 13:36 authdns2001 is depooled to restore ns1.wikimedia.org
+* 14:07 Maps Tile Service is moved from codfw to eqiad
+* 14:11 WikiData Query Service gets pooled in eqiad
+* 14:30 ports on the affected switch are marked as disabled on asw-a-codfw virtual-chassis
+* 14:37 disable affected network interface in lvs2010
+* 14:41 disable affected network interface in lvs2009
+* 15:14 re-enable affected network interface in lvs2010
+* 15:31 remote hands are used in codfw to power-cycle the affected switch without success
+* 15:38 re-enable affected network interface in lvs2009
+* 15:48 Decrease depool threshold for the edge caching services
+* 16:29 Decrease depool threshold for MediaWiki API service
+* 16:56 Error rate recovers '''OUTAGE ENDS'''
+'''Monday 19th'''
+* 08:15 depool text cache codfw PoP
+* 17:10 defective switch gets replaced
+* 17:21 authdns2001 is pooled
+*18:20 restored high availability in high-traffic1 load balancer in codfw
+*18:35 lvs2010 recovers row A connectivity
+*18:53 lvs2009 recovers row A connectivity
+
+* 20:29 pool text cache codfw PoP
+'''Tuesday 20th'''
+
+* 13:45 Maps Tile Service is back to being served from codfw
+
+== Detection ==
+The incident was detected via automated monitoring reporting several hosts of rack A2 going down at the very same time:
+* <icinga-wm> PROBLEM - Host elastic2038 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host kafka-logging2001 is DOWN: PING CRITICAL - Packet loss = 100
+* <icinga-wm> PROBLEM - Host ns1-v4 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host authdns2001 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host ms-be2051 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host lvs2007 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host thanos-fe2001 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host elastic2055 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host elastic2037 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host ms-fe2005 is DOWN: PING CRITICAL - Packet loss = 100%
+* <icinga-wm> PROBLEM - Host ms-be2040 is DOWN: PING CRITICAL - Packet loss = 100%
+== Conclusions ==
+As a result of losing one single switch, services were affected more than expected due to several weaknesses:
+* 3 load balancers including the backup one get the row A traffic from one single network switch
+* Depool threshold of several services is too restrictive to continue to work as expected losing a complete row
+
+=== What went well? ===
+* Automated monitoring detected the incident
+* Even if several services have been affected, user facing impact was mild.
+
+=== What went poorly? ===
+
+* One switch providing row A traffic to three out of four load balancers magnified the incident unnecessarily.
+* Misconfigured depool threshold on several services made the outage longer than strictly required
+* Pybal IPVS diff check failing to consider a too restrictive depool threshold scenario made the debugging harder
+
+=== Where did we get lucky? ===
+* Mild user-facing impact.
+
+=== How many people were involved in the remediation? ===
+* 4 SREs troubleshooting the issue plus 1 incident commander
+
+== Actionables ==
+
+* Mitigate unresponsive switch (Done). https://phabricator.wikimedia.org/T286787
+* Load balancers should be able to handle a NIC failing to be configured. https://phabricator.wikimedia.org/T286924
+*Audit eqiad & codfw LVS network links. https://phabricator.wikimedia.org/T286881
+*Avoid using the same switch to get traffic from a row on the primary and secondary load balancers. https://phabricator.wikimedia.org/T286879
+*Fix Pybal IPVS diff check https://phabricator.wikimedia.org/T286913
+* Fix depool threshold for text & upload edge caching services https://gerrit.wikimedia.org/r/c/operations/puppet/+/705381
+*Fix depool threshold for mw api service https://gerrit.wikimedia.org/r/c/operations/puppet/+/708072

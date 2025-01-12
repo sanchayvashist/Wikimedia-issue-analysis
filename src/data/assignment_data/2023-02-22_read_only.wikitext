@@ -1,0 +1,192 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T330300
+| paged-num = 0
+| responders-num = ~7
+| coordinators = Jcrespo
+| start = 2023-02-22 11:03:25 (major impact starts at 2023-02-22 12:16:21)
+| end = 2023-02-22 12:18:48
+| metrics = ?
+| impact = For approximately 2 minutes, editing was disabled site-wide. For approximately 54 minutes, editing failed for some users in the codfw datacenter (around 1-2% of all edits)
+}}
+
+While performing a [[phab:T330271|live switchover test]] in advance of the [[phab:T327920|2023 WMF datacenter switchover]], an existing logical bug on the switchover test script accidentally set the secondary datacenter in read-only mode. While this didn't disrupt most users, mobile editing for people geolocated to codfw app servers (mostly, people in the Americas, and part of Asia and Oceania) had the editing interface disabled (while desktop users were redirected to edit through eqiad). While trying to fix this issue, an tooling interface issue caused all datacenters to be set in read-only mode, disabling editing for all users. This was quickly reverted for both datacenters and editing was restored.
+
+{{TOC|align=right}}
+
+==Timeline==
+[[File:Incident editing disruption 2023-02-22.png|thumb|right|Editing disruption]]
+[[File:DBReadOnlyError_exceptions_during_the_2023-02-22_read_only_incident.png|thumb|right|Codfw read only exceptions]]
+[[File:Read only false exceptions during the 2023-02-22 read only incident.png|thumb|right|read_only=false exceptions]]
+
+''All times in UTC.''
+
+*11:03 <+logmsgbot> !log cgoubert@cumin1001 START - Cookbook sre.switchdc.mediawiki.02-set-readonly
+*11:03 <+logmsgbot> !log cgoubert@cumin1001 [DRY-RUN] MediaWiki read-only period starts at: 2023-02-22 11:03:19.149671 ''Mediawiki is now read-only in codfw only -'' '''Minor editing outage starts now'''
+*11:13 <+logmsgbot> !log cgoubert@cumin1001 END (PASS) - Cookbook sre.switchdc.mediawiki.07-set-readwrite (exit_code=0)
+''Only sets read-write in eqiad - Codfw is still read-only with the switchover message''
+
+User reports warn of ongoing issues (most edits from eqiad app servers and desktop-codfw can flow normally):
+*11:39 <Yahya> Hello, bnwiki is now read-only. Some users can edit and some can't. Can anyone tell me if any maintenance work is going on! Never seen a wiki is read-only for so long.
+*11:42 <taavi> I ma about to leave but -tech has a report of users seeing read-only errors
+*11:42 <jynus> taavi: which wiki? en?
+*11:42 <taavi> bn
+*11:42 <Bsadowski1> yeah bn
+*11:43 <jynus>	 that's s3
+*11:43 <claime> that's not normal, we should not be changing the RO status in the live DC during the live-test
+*11:49 <taavi> the timing matches with the read-only cookbook
+Debugging ensues, as well as potential unrelated causes.
+*12:09 <claime> cgoubert@cumin1001:/var/log/spicerack/sre/switchdc$ sudo confctl --object-type mwconfig select name=ReadOnly get
+*12:09 <claime> {"ReadOnly": {"val": "false"}, "tags": "scope=codfw"}
+*12:09 <claime> {"ReadOnly": {"val": false}, "tags": "scope=eqiad"}
+*12:13 <@taavi> why is the other false a string and the other a boolean?
+The cause of read-only is confctl not setting the right type and putting a string instead of a boolean
+
+Multiple combinations of confctl set tried:
+*12:15 <claime> sudo confctl --object-type mwconfig select name=ReadOnly,scope=codfw set/val=false
+*12:15 <claime> sudo confctl --object-type mwconfig select name=ReadOnly,scope=codfw set/val=False
+*12:16 <claime> sudo confctl --object-type mwconfig select name=ReadOnly,scope=codfw set/val=no
+*12:16 <+logmsgbot> !log akosiaris@cumin1001 conftool action : set/val=false; selector: name=ReadOnly
+This last one sets eqiad read-only by the same mechanism, the variable is now a string instead of a boolean, which is interpreted by mw as being "true"
+
+''Eqiad is now read-only too -'' '''Major editing outage starts now'''
+
+* 12:18 Incident opened.  '''Jaime''' becomes IC.
+
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 START - Cookbook sre.switchdc.mediawiki.07-set-readwrite
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 MediaWiki read-only period ends at: 2023-02-22 12:18:11.451680
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 END (PASS) - Cookbook sre.switchdc.mediawiki.07-set-readwrite (exit_code=0)
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 START - Cookbook sre.switchdc.mediawiki.07-set-readwrite
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 MediaWiki read-only period ends at: 2023-02-22 12:18:45.829060
+*12:18 <+logmsgbot> !log cgoubert@cumin1001 END (PASS) - Cookbook sre.switchdc.mediawiki.07-set-readwrite (exit_code=0) '''- Outage stops now'''
+Using the sre.switchdc.mediawiki.07-set-readwrite cookbook to set the right value type, running it once with codfw -> eqiad and once with eqiad -> codfw to set them both.
+*''Both codfw and eqiad are now back to readwrite status''
+*12:22 - 12:26: Double checking with users the issue is gone
+*12:39 Issue declared as resolved
+
+==Detection==
+
+Editing issue from mobile + codfw:
+* No alerting went off because of this
+* Reports from #wikimedia-tech surfaced ongoing issues when editing from the mobile interface (read only disabled the edit button, while on desktop edits were sent to codfw)
+
+Full read only mode issue:
+* [12:20:17] <jinxer-wm>	 (MediaWikiHighErrorRate) firing: (4) Elevated rate of MediaWiki errors - appserver - https://wikitech.wikimedia.org/wiki/Application_servers/Runbook  - https://alerts.wikimedia.org/?q=alertname%3DMediaWikiHighErrorRate
+
+Although by this time the issue had been already corrected.
+
+Specifically, failing to set codfw as read-write wasn't detected as failing until some time passed and reports confirm the issue persisted.
+
+==Conclusions ==
+
+===What went well?===
+
+* Test running gave an early heads up to people on call in case something went wrong/monitoring happened
+* Several volunteers quickly and effectively rised issues on #wikimedia-tech, and collaborated to help resolve the issue, specially when error rate was low
+* While there were not necessary in this scenario, there are multiple layers preventing a split-brain between datacenters (writes happening on two datacenters at the time, independently)
+
+===What went poorly?===
+
+* Monitoring didn't catch the initial low rate of errors, as it was between 10-20 per minute and only 1-2% of total edits (plus no possible monitoring of the edits that were never done because disabled on ui)
+* Different behavior on desktop vs mobile for read only, confusing the debugging
+* Manual reverting was confusing or error-prone due to data type issues
+
+===Where did we get lucky?===
+
+*
+
+==Links to relevant documentation==
+
+* [[MediaWiki and EtcdConfig]]
+* [[Conftool]]
+* [[Switch Datacenter]]
+* https://config-master.wikimedia.org/mediawiki.yaml
+
+==Actionables==
+
+* {{bug|T330300}}: sre.switchdc.mediawiki.07-set-readwrite doesn't reset both datacenter to rw {{done}}
+* Stricter conftool data type validation?
+* Uniformize mobile and desktop behaviour when in read only?
+* {{bug|T330304}}: Globalize mwconfig ReadOnly (would avoid unpredictable behaviour when one DC is RO and not the other)
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|no
+|
+|-
+|Were fewer than five people paged?
+|yes
+|No paging happened
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|No one was paged
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|https://docs.google.com/document/d/1SwXRLONP4fG6YKfCg5B26IozpQ6Hst424_ihOH0anEA/edit
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|https://www.wikimediastatus.net/incidents/yhshxyn9pw22
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|The task that caused the issue was the one created to prevent the issue (circular dependency)
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|no
+|Reverting the change caused confusion
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

@@ -1,0 +1,139 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T323620
+| paged-num = 3
+| responders-num = 2
+| coordinators = Gehel
+| start = 2022-11-22 15:15
+| end = 2022-11-22 15:30
+| metrics = wdqs
+| impact = For at least 15 minutes, users of the wikidata query service experienced a lack of service and/or extremely slow responses
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->For at least 15 minutes, users of the Wikidata Query Service either could not connect or received extremely slow responses.{{TOC|align=right}}
+
+==Timeline==
+15:15 UTC 
+
+* Pybal alert for all public wdqs hosts in eqiad datacenter. This pages on-duty SREs akosiaris, jelto and herron.
+* [https://grafana-rw.wikimedia.org/d/000000522/wikidata-query-service-frontend?orgId=1&from=1669129200000&to=1669132200000 Increased 5xx error rates]
+* [https://grafana.wikimedia.org/d/000000489/wikidata-query-service?orgId=1&from=1669129200000&to=1669132200000&viewPanel=12 Increased load avg-15 for all public wdqs hosts] ( > 40 generally indicates user impact)
+
+*15:16 dcausse, gehel and inflatador (Search Platform team and owners of the WDQS service) begin troubleshooting
+*15:22 inflatador begins restarting all public wdqs hosts in eqiad datacenter. Alerts begin to clear. At this point, we presume the impact to users is over.
+*'''15:34''' inflatador finishes all restarts.
+*16:11 (as I write this) load avg-15 remains at reasonable levels and we consider the service to be stabilized.
+
+<!-- Reminder: No private information on this page! -->==Detection==
+The issue was detected by monitoring (pybal alerts)
+
+Example alert verbiage: <code>PROBLEM - PyBal backends health check on lvs1020 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs1015.eqiad.wmnet, wdqs1012.eqiad.wmnet, wdqs1004.eqiad.wmnet, wdqs1014.eqiad.wmnet, wdqs1016.eqiad.wmnet, wdqs1007.eqiad.wmnet,</code> 
+
+The appropriate alerts fired, and contained enough actionable information for humans to quickly remediate the problem.
+
+==Conclusions ==
+Search team has been aware of the brittle nature of WDQS for some time, and there are ongoing efforts to migrate off its current technology stack (specifically Blazegraph). We are also in the process of [[phab:T313751|defining an SLO for WDQS]].
+
+===What went well?===
+
+The appropriate alerts fired, and contained enough actionable information for humans to quickly remediate the problem.
+
+=== What went poorly? ===
+
+We're still investigating, but we believe one bad query caused this outage. A single user or query should not be able to take out an entire datacenter.
+
+===Where did we get lucky?===
+
+* We were able to remediate once. Theoretically, the user could keep sending the bad query over and over again, causing the same effect for end-users.
+
+==Links to relevant documentation==
+
+[[Wikidata Query Service/Runbook]]
+
+==Actionables==
+
+* Email to Wikidata Users list for awareness
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+| Was the public status page updated? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

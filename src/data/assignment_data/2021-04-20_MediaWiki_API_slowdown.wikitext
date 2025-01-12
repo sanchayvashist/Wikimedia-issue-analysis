@@ -1,0 +1,15 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+From approximately 7:31 to 8:16 UTC, there has been instability serving Wiki uncached content (mostly impacted would be authenticated users and bots, as well as POST requests), affecting at first commonswiki, but later most other wikis, albeit at a lower rate.
+The impact between those timestamp was increased latencies (up to 5+ seconds to return results) and high level of errors (approximately 1/4th of request lost). This was due to overload on commonswiki requests blocking resources on most api & database servers, which in turn created contention on most other wikis.
+
+== Actionables ==
+
+* Uncached wiki requests partially unavailable due to excessive request rates from a bot https://phabricator.wikimedia.org/T280232
+* Determine safe concurrent puppet run batches via cumin https://phabricator.wikimedia.org/T280622

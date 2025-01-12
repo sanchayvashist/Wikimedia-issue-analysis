@@ -1,0 +1,28 @@
+{{irdoc|status=final}}
+== Summary ==
+Roll out of wmf.8 to group1 broke the world.
+
+=== Detection ===
+Initial indicators of the issue were picked up in logstash and via logspam-watch on mwlog1001.  A large number of Icinga alerts followed.
+
+It seems likely that the primary issue was obscured during the initial deploy by a focus on Parsoid errors.
+
+== Timeline ==
+'''All times in UTC.'''
+
+* 20:12 brennen: Train wmf.8 roll fowards from group0 to group1 as well (try 1) [https://tools.wmflabs.org/sal/log/AW7Sixq3vrJzePItk4h-]
+* 20:12 Large amounts of logspam noticed, especially from Parsoid/PHP, and Icinga issues many alerts.
+* 20:28 brennen: Train wmf.8 rolled back to just group0 [https://tools.wmflabs.org/sal/log/AW7SmYXk0fjmsHBaFE31]
+
+[Fixes to exclude Parsoid/PHP]
+
+* 23:30 brennen: Train wmf.8 roll fowards from group0 to group1 as well (try 2) [https://tools.wmflabs.org/sal/log/AW7TP9cdvrJzePItk_Z4]
+* 23:30 '''OUTAGE BEGINS'''
+* 23:30 Large spike in database errors in logstash ([https://phabricator.wikimedia.org/T239877 T239877]), shortly thereafter large amounts of Icinga alerts go off.
+* 23:30+ Production group1 '''and''' group2 wikis become noticably sluggish, eventually stopping working entirely.
+* 23:35 brennen: Attempted train wmf.8 roll back thwarted by canary failures [https://tools.wmflabs.org/sal/log/AW7TRL3cfYQT6VcD-zDz]
+* 23:38 brennen: Train wmf.8 rolled back to just group0, again [https://tools.wmflabs.org/sal/log/AW7TR9Pk0fjmsHBaFLIt]
+* 23:38 '''OUTAGE ENDS'''
+
+== Links to relevant documentation ==
+* [[Heterogeneous_deployment/Train_deploys#Rollback]]

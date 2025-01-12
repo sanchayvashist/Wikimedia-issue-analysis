@@ -1,0 +1,14 @@
+{{irdoc|status=final}}
+==Summary==
+Slow database queries resulted in php-fpm worker exhaustion.
+
+'''Impact''': For about 10 minutes, backends were slow or unavailable for all wikis. This affected logged-in users, most bots/API queries, and some page views from unregistered users (pages that were recently edited or otherwise expired from the CDN cache). 
+
+'''Documentation''':
+
+* Public incident task: [[phab:T291311|T291311]] 
+* Similar to [[Incident documentation/2021-09-04 appserver latency]] and [[Incident documentation/2021-04-15 appserver latency]].
+
+==Actionables==
+
+* [[phab:T284419|T284419]] (restricted)

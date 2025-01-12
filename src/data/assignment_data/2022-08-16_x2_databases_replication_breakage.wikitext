@@ -1,0 +1,192 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task = T315274
+| paged-num = 9
+| responders-num = 7
+| coordinators = CWhite
+| start = 04:07:58
+| end = 04:43:22
+| metrics = 
+| impact = For 36 minutes, errors were noticeable for some editors. While saving edits was unaffected (verified by edit rate), the errors looked like they could impact editing due to appearing during edit-related actions. ~1 hour of volatile cache data was lost.
+}}
+
+When replication broke between local MainStash databases, a previously undiscovered bug in how MediaWiki handles failures of local MainStash replicas, produced user-noticeable exceptions (mainly during edit-related activities).
+
+Unlike thought at the time, write failures to the MainStash database were not fully prevented from being noticed by MediaWiki's shutdown handler. ChronologyProtector was (wrongly) enabled for the [[X2|x2 database section]], and so similar to core databases, MainStash required at least one replica to be up and not lagged in order to allow MainStash writes to succeed.
+
+{{TOC|align=right}}
+
+Earlier in the day, cross-dc replication for x2 databases broke, this was caused by the application requiring <code>STATEMENT</code>-based replication while the databases were (wrongly) configured with the incompatible <code>ROW</code>-based replication. This caused a split brain state, where eqiad and codfw drifted apart in their respective datasets. This by itself had '''low to no impact''' as codfw traffic at the time was restricted to testwiki, test2wiki and mediawiki.org. Service itself would have not been impacted even if codfw received more significiant traffic as MainStash does not require or observe data consistency.
+
+In response to alerts about x2 replication breakage, operators tried to fix the then lower priority issue, by running <code>SET GLOBAL sql_slave_skip_counter = X</code>, for values of 1 and 2 a few times. This caused replication to break further, also affecting local replicas within Eqiad. Current understanding of MainStash service only requires the primary DB to be up and tolerates replica failure, so replication breaking or stopping within a datacenter shouldn't cause an outage, as the replicas are meant to be passive standby hosts. However, because [[phabricator:T312809|ChronologyProtector was still enabled]], this caused MainStash to observe the replication lag and thus prevent MainStash writes to the primary DB. These write failures in turn triggered a bug that allowed MainStash write failures to be insufficiently silenced and thus cause user-noticeable error messages in certain editing-related MediaWiki actions. Saving of edits was unaffected (as verified by edit rate metric), although error rates were comparable to edit rates in terms of volume:
+
+ Explicit transaction still active; a caller might have failed to call endAtomic() or cancelAtomic().
+
+While a few other things were attempted, such as wiping out the ephemeral MainStash dataset and resetting replication, the way replication was restored was by:
+# Switching active write hosts to STATEMENT-based replication.
+# Disabling GTID (this fixed the cross-dc replication).
+# Skipping statements on the replicas with CHANGE MASTER until they started replicating STATEMENT binlog positions.
+
+Approximately 1 hour of MainStash data from x2 was lost and the servers ended up replicating but with different data each. Because both data and logs were purged at earlier states of debugging, later root cause findings were much harder to find.
+
+{{note|'''Edit:''' The root cause was initially understood as an operator error. Upon further research, we understand that operator actions were informed by MainStash service expectations, that the chosen mitigation would be safe to perform even if (as it did) caused the degraded X2 database to fail further. There was an unknown application bug leading to hard failures when X2 is down. The incicent coordinator decided to give more weight to this bug as the ''real'' cause of the incident.}}
+
+==Timeline==
+''All times in UTC.''
+[[File:Atomic MediaWiki errors.png|thumb|right|Exception error log during the incident]]
+[[File:Atomic edit rate.png|thumb|right|Edit rate during the incident]]
+* '''01:38:00''' mediawiki.org [https://gerrit.wikimedia.org/r/c/operations/puppet/+/823113 moved to multi-dc]
+* '''03:08:12''' <code><nowiki>Delete query sent to codfw x2 primary: #220816  3:08:12 server id 180363291  end_log_pos 1038450247 CRC32 0xcc3de9f1   Annotate_rows:
+#Q> DELETE /* SqlBagOStuff::deleteServerObjectsExpiringBefore  */ FROM `objectstash` WHERE (exptime < '20220816020812') AND keyname IN ('azwikibooks:captcha:1072943127',...)</nowiki></code> (full query on internal doc)
+Note this was the query that blew up, not necessarily the one that triggered the issue- logs and data were deleted so research is hard- the main thing is both primary servers had, even if for some time, different data when executing this.
+* '''03:08:23''' <code>SERVICE ALERT: db2144;MariaDB Replica SQL: x2 #page;CRITICAL;SOFT;1;CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table mainstash.objectstash: Can't find record in 'objectstash', Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the event's master log db1151-bin.000810, end_log_pos 5460559</code>
+* '''03:10:03''' <code>SERVICE ALERT: db1151;MariaDB Replica SQL: x2 #page;CRITICAL;SOFT;1;CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table mainstash.objectstash: Can't find record in 'objectstash', Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the event's master log db2144-bin.000813, end_log_pos 1038458517</code> - At this moment, there is a split brain, but given the, at the time, load on codfw, no big user impact.
+* '''03:42''' Cwhite escalated by page to Amir, Manuel, Jaime. Amir was waken up by this. (Manuel was on holidays at the time)
+* '''03:54''' Reverted multi-dc patch https://gerrit.wikimedia.org/r/c/operations/puppet/+/823231
+* '''04:07:58''' Amir tries a few things on db1151: <code>START/STOP slave</code>, <code>sql_skip_slave_counter</code> several times ('''OUTAGE STARTS HERE'''), then <code>TRUNCATE TABLE</code>, then <code>RESET SLAVE</code>, unsuccessfully.
+* '''04:08:07''' <code>SERVICE ALERT: db2143;MariaDB Replica IO: x2 #page;CRITICAL;SOFT;1;CRITICAL slave_io_state Slave_IO_Running: No, Errno: 1236, Errmsg: Got fatal error 1236 from master when reading data from binary log: 'could not find next log: the first event 'db2144-bin.000670' at 517376598, the last event read from 'db2144-bin.000813' at 1044345737, the last byte read from 'db2144-bin.000813' at 1044345768.'</code>
+* '''04:20''' Amir called in Jaime
+* '''04:26''' Incident opened. cwhite becomes IC.
+* '''04:37''' Switched MainStash back to Redis patch is prepared (never deployed) https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/823275/
+* '''04:39''' Jaime switched master to STATEMENT, flushed logs to apply it
+* '''04:39''' Switched codfw master to disable GTID, that made it work (this was done on codfw first as a test)
+* '''04:39''' Switched eqiad replicas to both disable GTID and jump to latest STATEMENT coord, skipping ~1h of data. Untouched codfw replicas for debugging later. Replicas start caching up.
+* '''04:43:22''' “Explicit transaction still active” errors stopped. '''OUTAGE ENDS HERE'''
+* '''04:44''' Reverted switching MainStash back to Redis https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/823232
+* '''04:45:40'''  SERVICE ALERT: db1152;MariaDB Replica Lag: x2 #page;OK;HARD;10;OK slave_sql_lag Replication lag: 0.00 seconds
+* '''04:48''' eqiad X2 replication restored, users report able to save edits again
+* '''05:00''' Decision is made to leave replication broken on db2142 and db2143 for forensics during working hours.
+<!-- Reminder: No private information on this page! -->
+
+==Detection==
+
+[https://wm-bot.wmflabs.org/libera_logs/%23wikimedia-operations/20220816.txt 2 alert pages] were sent as soon as internal replication broke on the primary x2 servers. This alert was promptly attended.
+
+The user-facing outage started later, with more pages about the replicas. Although we're unsure if sufficiently different from the first 2 pages to indicate the severity. User reports reached SRE at this point too, but people were already working on a resolution by then.
+
+==Conclusions==
+
+===What went well?===
+
+* Coordination of responders and decisions went as well as it can be organized- pages were attended, people escalated the issue appropriately and promptly
+* This didn't happen on a regular metadata or content section db, which would have required mass, multi-terabyte-data backup recovery
+* Decision to depool codfw for mediawiki was taken quickly
+
+===What went poorly?===
+
+* Expected and documented application behavior (local dc replicas being fully passive) was not actual observed behavior: passive hosts were actually vital for the application to consider the service in good health
+* Configuration on servers did not match expectations by the application (ROW vs STATEMENT)
+* Application was not tested with the same configuration as production beforehand, or was not tested under common failure scenarios
+* Exceptions should have not been generated for errors that were not fatal
+* Unsafe, discouraged operational procedures were run on a section's primary server (sql_slave_skip_counter)
+* Production testers were not immediately aware of production errors/pages triggered by multi-dc work.
+* Page text doesn't make immediately clear what is the potential impact (the same text for db1151 and db1152 can mean user-impacting outage or minor issue depending on the context)
+* Application purges may need tuning to be fully IDEMPOTENT (e.g. DELETE IGNORE?)
+* "Doing nothing" would have been way less impacting than trying to fix issues in 2 ways- errors would have not been produced to users at all, and even fixing it could have been possible in a non-dba way (fixing the split brain by depooling codfw, fixing the exceptions by leaving pooled a single "good" server). However this was not possible to be known given the information known by operators at the time.
+* Radical actions, such as deleting all data and deleting all logs made debugging during the issue and after it much harder- generating a copy or stopping replication on one dc or host would have helped. Also testing those on passive hosts to verify they work would have been wiser, rather than applying it on all at once.
+* Service details (peculiarities) of the service were not known for some of the outage responders, important actions were not documented or promptly shared. Information didn't flow smoothly and proactively, even after the outage end - delaying the fix and root cause research.
+
+===How many people were involved in the remediation?===
+
+* 7
+
+==Links to relevant documentation==
+
+* [https://wikitech.wikimedia.org/w/index.php?title=MariaDB/troubleshooting&diff=next&oldid=1867687 Never, ever run sql_skip_slave_counter]
+* [[MariaDB#x2]]: buggy behavior of x2, as of August 2022
+
+==Actionables==
+
+* {{phab|T315427}} Switch x2 to statement-based replication, and in general re-review db configuration (disable GTID, read-write, slave_exec_mode)
+* Review runbooks/procedures for x2 (and parsercache), specifically regarding replication issues
+** E.g. Sometimes doing nothing and having a split brain is better than trying to fix stuff manually (e.g. waiting & depooling a dc, and cloning afterwards)
+* Restore replication on codfw replicas, repool them, remove downtimes/silences, recheck read-only mode {{done}}
+* Validate MW’s concept of multi-master conflict resolution by performing simultaneous writes and simultaneous purges on both DCs
+** As far as I was told, UPSERTs seemed to work but purges may need review (DELETE IGNORE?)
+* Fix uncaught exception from LoadBalancer::approvePrimaryChanges() which caused total failure rather than graceful failure https://gerrit.wikimedia.org/r/c/mediawiki/core/+/823791
+* Remove chronology protector checks so databases don't go into read only if local replicas crash or get replication broken: {{phab|T312809}}
+* Re-enable multi-DC mode on testwiki, test2wiki and mediawikiwiki https://gerrit.wikimedia.org/r/c/operations/puppet/+/824039
+* Make attempts to mistakenly depool a primary db have a more helpful message: {{phab|T314658}}
+* '''See tasks {{phab|T315271}}''' (initial replication breakage/multi-dc implications) and '''{{phab|T315274}}''' (user visible outage, mw errors, within-dc replication issues) for discussion. See https://docs.google.com/document/d/1_nDpRvLEK9dGI2XVNeZVC1TcA89EYBCptiVCKItlWug for full logs and other data.
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+| yes
+| overlap of 4
+|-
+|Were the people who responded prepared enough to respond effectively
+| yes
+|
+|-
+|Were fewer than five people paged?
+| no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+| yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+| no
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+| yes
+|
+|-
+|Was the public status page updated?
+| no
+|
+|-
+|Is there a phabricator task for the incident?
+| yes
+|
+|-
+|Are the documented action items assigned?
+| yes
+| only 1 unassigned
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+| yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+| yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+| yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+| yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+| yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+| no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+| 11
+|
+|}

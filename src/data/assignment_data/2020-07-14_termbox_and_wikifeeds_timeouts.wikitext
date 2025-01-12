@@ -1,0 +1,78 @@
+{{irdoc|status=final}} 
+==Summary==
+With the introduction of a number of changes to make HTTPS redirects unconditional<ref>https://phabricator.wikimedia.org/T256095</ref>, the the MediaWiki API virtual hosts returned a HTTP 302 redirect to the HTTPS edge (e.g. external) address for every request that doesn't include the <code>X-Forwarded-Proto: https</code><ref>https://en.wikipedia.org/wiki/X-Forwarded-For</ref> header. For instance a request to <code><nowiki>http://api-ro.discovery.wmnet</nowiki></code>  would return a 302 to  <code>Location: <nowiki>https://www.wikidata.org/w/index.php</nowiki></code>
+
+This made some [[Termbox]] and [[Wikifeeds]] requests run into timeouts, because traffic towards MediaWiki via our edge (egress) is not allowed from the Kubernetes Clusters.
+
+<br />
+'''Impact''': 
+
+With a total of ~15 hours the outage was very long. During this period around 12% of requests to Termbox to failed with HTTP 500 (~186.000 requests). For Wikifeeds, only a specific endpoint was affected but for that more or less every request took longer than 30s and should be considered a failure. That's a total of around 1.250.000 requests lost.
+
+Since we have 2 layers of caching in our edges, the actual user impact (e.g. the Wikipedia mobile app homepage not loading) was smaller.
+
+{{TOC|align=right}}
+
+==Timeline==
+'''All times in UTC.'''
+[[File:20200714-termbox and wikifeeds timeouts restbase.png|thumb|restbase endpoint latency]]
+[[File:20200714-termbox and wikifeeds timeouts termbox.png|thumb|termbox latency]]
+[[File:20200714-termbox and wikifeeds timeouts wikifeeds.png|thumb|wikifeeds latency]]
+*2020-07-13 19:33 unconditional HTTPS redirect deployed for group1 wikis ([https://sal.toolforge.org/log/sdCqSXMBv7KcG9M-vLkx SAL]) '''OUTAGE BEGINS'''
+*2020-07-13 22:27 unconditional HTTPS redirect deployed for all wikis ([https://sal.toolforge.org/log/R_5KSnMBj_Bg1xd3neAS SAL])
+*2020-07-14 00:49 Phab ticket [[phab:T257887|"restbase: "featured" endpoint times out]]" was created
+*06:03 restbase Icinga alerts where noticed by another SRE who verified there was an impact on the Wikipedia mobile app '''INVESTIGATION STARTED'''
+*06:15 SRE figured the deployment of [[gerrit:c/operations/mediawiki-config/+/612396|I80ca62643f5c]] might have caused the issue
+*06:29 Full scap to sync new train branch to all app servers started (unrelated to this incident)
+*06:54 Scap canary check fails due to 302/200 HTTPS mis-match
+*07:48 SRE reverted [[gerrit:c/operations/mediawiki-config/+/612396|I80ca62643f5c]]
+*07:53 Revert led to lots of PyBal backend health check alerts (because it was configured to check for HTTP 302)
+*07:55 wikifeeds latency back to normal '''WIKIFEEDS/MAIN OUTAGE ENDS'''
+*08:00 SRE reverted [[gerrit:c/operations/puppet/+/612449|Ib8c5d71bb69a]] to have PyBal check for HTTP 200 again
+*08:06 PyBal restarts done, alerts stopped
+*08:13 Re-re-start full scap to push out wmf.41 and switch testwikis to it [[phab:T256669|T256669]]
+*09:20 Termbox was identified to still have issues as just the changes to group1 wikis where not reverted
+*09:30 SRE provided patches for the Kubernetes deployments of Wikifeeds and Termbox avoiding the redirect to the edge by talking HTTPS to the internal API vhosts directly. This needed including the internal puppet CA into the deployments.
+*10:16 Updated Termbox deployment rolled out to all clusters
+*11:18 Updated Wikifeeds deployment rolled out to all clusters
+*11:25 All serviced back to normal (except for slightly higher latency because of TLS handshake) '''OUTAGE ENDS'''
+*12:00 scap to sync new train branch continued
+*12:35 SRE fixed scap canary checks and PyBack backend helth checks (in preparation to undo the revert)
+*12:57 SRE undid the reverts of  unconditional HTTPS redirects
+==Detection==
+High latency in restbase was recognized by an SRE but was not classified as a critical because the number of requests timing out was acceptable and no #pages had fired.
+
+Hours later another SRE reacted to the Icinga alerts and warnings, and verified that this is a user facing issue (Wikipedia mobile app main page not loading).
+
+==Conclusions==
+Even though there was a minor user impact, which was evident in our graphs, it went unnoticed for hours. If Wikifeeds and Termbox were more heavily used, it is possible we would have caught this earlier. 
+
+===What went well?===
+
+* The commit/deploy introducing the error was quickly identified.
+* The root cause was quickly identified and fixed in Termbox and Wikifeeds.
+
+===What went poorly?===
+*Albeit relatively quickly detected, there was no investigation started directly. Leading to a very long outage.
+*There was a lot of alert noise due to scap failures while trying to deploy the configuration fixes 
+*Additional alert noise from the mediawiki version mismatch alert
+
+===Where did we get lucky?===
+*Lot of requests where still served from caches.
+*Wikifeeds and Termbox are not heavily used.
+
+===How many people were involved in the remediation?===
+*At least 3 SRE plus IC
+
+==Links to relevant documentation==
+None for now. 
+
+==Open Questions==
+*Why did the SREs involved in the deployment of not see the problem with wikifeeds (and termbox) as stuff to care for?
+*Understand how coordination around the change that caused the incident failed.
+*The Wikipedia mobile app was only partially working and we had no monitoring in place indicating that.
+*Should we have a better way of preventing deploy trains/scap syncs from starting in case of an ongoing incident?
+
+==Actionables==
+
+* [[phab:T258692|Monitoring/Alerting for Wikipedia mobile app errors]]

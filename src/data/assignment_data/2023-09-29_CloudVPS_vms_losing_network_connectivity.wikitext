@@ -1,0 +1,157 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T347665
+| paged-num = 1
+| responders-num = 5
+| coordinators = arturo
+dcaro
+taavi
+| start = 11:00 UTC 2023-09-28 (day before this report)
+| end = 13:00 UTC 2023-09-29
+| metrics = No relevant SLOs exist
+| impact = Any cloud-vps hosted external service was down (including toolforge, paws, quarry, and others). Some of the VMs became unreachable through ssh.
+}}
+
+<!-- Reminder: No private information on this page! -->During a package cleanup, {{gerrit|961005}} was merged to remove some packages. This caused to bullseye VMs in the cloud realm to remove isc-dhcp-client, and once the ip leases for these started to expire the VMs started losing network connectivity.
+
+This eventually included the proxies CloudVPS uses to serve external traffic, making any hosted project lose that traffic too.
+
+This also took down the metricsinfra VMs that are in charge of the monitoring and alerting for CloudVPS hosted projects, so there were no alerts from it.
+
+From there recovery included having to roll-reboot all the toolforge VMs that depend on the nfs servers as the nfs service itself got affected and clients got stuck (common procedure, but slow).
+
+{{TOC|align=right}}
+
+==Timeline==
+tools k8s nodes reboot: https://sal.toolforge.org/tools?d=2023-09-29
+
+Alert logs (team=wmcs, there might be non-wmcs ones): https://logstash.wikimedia.org/goto/906ec4838ab338cc70e1484010ab7df2
+
+IRC archives:
+
+* https://wm-bot.wmcloud.org/logs/%23wikimedia-cloud-admin/20230929.txt
+* https://wm-bot.wmcloud.org/logs/%23wikimedia-cloud/20230929.txt
+
+''All times in UTC.''
+
+28 September 2023:
+
+*11:07 '''OUTAGE BEGINS - kinda, patch is merged''' https://gerrit.wikimedia.org/r/c/operations/puppet/+/961005
+29 September 2023:
+*04:14:00 - 07:06 - some users report connectivity issues on irc, no admins notice it  - First user impact
+*06:24 - user reports connectivity issues https://phabricator.wikimedia.org/T347661
+*06:56 - outage task created by user https://phabricator.wikimedia.org/T347665
+*07:06 - admin starts looking into the issues as they notice alertmanager down (https://www.irccloud.com/pastebin/aA1NNmt1/), another admin joins
+*07:11:25 - find that project-proxy is not responding
+*07:16:13 - find out that dhclient is not installed on the VM (that otherwise looks ok)
+*07:18:06 - found that there was a patch that deleted the package through puppet by the apt logs
+*07:23:59 - revert sent, restore started (as they can't run puppet, we have to "manually" fix them), two efforts: one admin writing as script to automate the fix, the other admin starting to manually fix the core/critical VMs
+*07:31 - first email sent to cloud-announce about the outage
+*08:10 - a third admin joins, helps manually fixing the other critical VMs
+*08:21:23 - metricsinfra alerts restored (manually)
+*08:35 - we ran a script to fix the issues, running in parallel
+*09:16:58 - script finishes a first round through the whole fleet
+*09:32 - rebooting tools-nfs-2 since the network setup on nfs servers needs a reboot + puppet run ({{Phabricator|T347681}})
+*09:37 - start rebooting k8s worker nodes to release stuck nfs file handles
+*09:38:10 - admin paged: checker.tools.wmflabs.org/toolschecker: NFS read/writeable on labs instances
+*09:42 - grid reboot cookbook is failing as the nodes are stuck and it does not try to force-reboot through openstack
+*10:02 - rebooting all other NFS instances
+*10:08:42 - all grid bastions and workers rebooted
+*11:46 (Voila) '''OUTAGE ENDS - message on irc, all services running'''
+*13:03 - email to cloud-announce declaring the outage over
+<!-- Reminder: No private information on this page! -->
+
+==Detection==
+The issue was first detected by users, and it was not until the first admin started their work day that they noticed something was wrong.
+
+The only page was received way after, once the recovery had started.
+
+Note that the outage took one of the monitoring and alerting systems down, though we would not have been paged by any alert there (https://phabricator.wikimedia.org/T323510).
+
+==Actionables==
+
+* {{phab|T347694}} - investigate why we did not get any pages, and fix/add them
+* {{phab|T288053}} - add meta-monitoring for metricsinfra
+* {{phab|T347683}} - create a cookbook to run commands through virsh console
+* {{phab|T347681}} - improve current nfs setup so it does not require to reboot + run puppet to bring online (as it might take 30 min for puppet to run unattended)
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|Alerting was broken.
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|None created
+|-
+| Was a public wikimediastatus.net entry created? 
+| no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|{{phab|T347665}}
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|{{phab|T288053}} will pursue meta-monitoring
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|no
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

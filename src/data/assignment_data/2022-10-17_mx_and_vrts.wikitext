@@ -1,0 +1,159 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task =T321135 
+| paged-num =6 (2 of them on-call, 4 opt-in for 24/7 pages)
+| responders-num =5 (2 on-call, 3 responded without having been paged)
+| coordinators =dzahn 
+| start =2022-10-17T20:32:09Z 
+| end =2022-10-17T23:07:09Z 
+|metrics=No relevant SLOs exist|impact=delayed mail delivery, users of VRT and general email recipients received mail delayed and received spam email}}
+
+…
+
+<!-- Reminder: No private information on this page! --><mark>A wave of spam email to an info@ address was routed from mail servers to the VRT machine (otrs1001).</mark>
+
+Many Perl processes were spawned which used up all the RAM of the virtual machine. oom-killer killed clamav-daemon.
+
+Without clamav mail delivery stopped.
+
+More mails started queing up on both otrs1001 and then the mail server mx1001.
+
+When the mail queue reached a critical threshold on mx1001, SRE got paged.
+
+Measures taken included increasing RAM available on the otrs1001 VM and deleting spam email.
+
+Eventually all mail was delivered, just with a delay.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+''All times in UTC.''
+
+*2022-10-17T20:32:09Z '''OUTAGE BEGINS''' with "20:32 <+jinxer-wm> (MXQueueHigh) firing: MX host mx1001:9100 has many queued messages: 7353 #page.."
+*2022-10-17:20:53:00Z It's identified that mail delivery fails because clamav-daemon gets killed by OOM-killer
+*2022-10-17:21:02:00Z The "max_threads" setting in the clamav-daemon config is changed from 12 to 2 and subsequently 1, in an attempt to keep it from being killed.
+*2022-10-17:21:46:00Z A bash script is executed that removes spam mail matching certain patterns (mini cooper) on mx1001.
+*2022-10-17:22:02:00Z The same script is executed on otrs1001 and the mail queue has been reduced by a lot
+*2022-10-17:22:34:00Z 'gnt-instance command is executed to increase RAM of the VM from 4GGB to 8GB
+*2022-10-17:22:39:00Z Number of mails in the queue (exiqgrep -c) starts to go down.
+*2022-10-17:22:45:00Z Puppet is renabled and run which reverts the previous changes to max_threads of clamav-daemon. It is using 12 threads again.
+*2022-10-17T22:51:00Z 'exim4 -qf' is executed on mx1001 to re-deliver queued mails, swapping continues but no more OOMs
+*2022-10-17T22:54:00Z memory freed up after an initial burst of activity
+*2022-10-17T23:07:09Z '''OUTAGE ENDS''' with "<+jinxer-wm> (MXQueueHigh) resolved: MX host mx2001:9100 has many queued messages: 4623.." when mail qeue is under threshold again.
+
+* https://wikitech.wikimedia.org/wiki/Server_Admin_Log#2022-10-17
+
+==Detection==
+On-call SRE got paged by Splunk-On-Call (VictorOps)
+
+incident name was: '''Critical: [FIRING:1] MXQueueHigh misc (node ops page prometheus sre)''', incident ID: [https://portal.victorops.com/ui/wikimedia/incident/3094/details VictorOps 3094]
+
+==Conclusions==
+
+<mark>We should have more than a single VRTS server.</mark>
+
+<mark>Spam should not take down the VRTS machine.</mark>
+
+===What went well?===
+
+*SRE were online and had ideas what to do.
+
+===What went poorly?===
+
+*It took longer than necessary until we did the reboot step out of concerns the server would not come back and because we don't have a fail-over machine.
+
+===Where did we get lucky?===
+
+*There actually was no problem with the VM coming back from reboot despite the long uptime and concerns about the NIC changing names.
+
+==Links to relevant documentation==
+
+*https://wikitech.wikimedia.org/wiki/Ganeti#Increase/Decrease_CPU/RAM
+
+==Actionables==
+
+* [https://phabricator.wikimedia.org/T321418 Increase RAM assigned to otrs1001 VM (done, increased from 4 to 8GB RAM)]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|VO ''attempted'' to page 6 people. 2 of them were on-call and were reached. 4 more seem to opt-in for 24/7 pages but did not respond. 3 other users did respond without being paged.
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+| There was no expectation that would happen. It was during assigned on-call rotation.
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|To the best of our knowledge
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|unless you count the general exim->postfix switch which might come with rspamd
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

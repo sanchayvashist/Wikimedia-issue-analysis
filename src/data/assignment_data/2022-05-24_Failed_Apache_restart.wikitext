@@ -1,0 +1,155 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 27
+| responders-num = 5
+| coordinators = Manuel Arostegui
+| start = 11:40
+| end = 12:16
+| impact = A very small amount of 502 HTTP errors for users (predominantly logged-in users). Plus some 140 IRC alerts for a subset of hosts running Apache
+}}
+* A Puppet change seem to have caused an apache restart https://gerrit.wikimedia.org/r/c/operations/puppet/+/798615/ that didn’t work as it made it listen 443 regardless whether mod_ssl is enabled
+** Alerts: connect to address 10.X.X.X and port 80: Connection refused | CRITICAL - degraded: The following units failed: apache2.service
+** Puppet was quickly disabled to prevent a site-wide outage (apache failing everywhere affected)
+** Initial triage was done via cumin: ''sudo cumin -m async 'mw1396*' 'sed -i"" "s/Listen 443//" /etc/apache2/ports.conf '  'systemctl start apache2 '''  as the patch revert didn’t work.
+** The final fix: https://gerrit.wikimedia.org/r/c/operations/puppet/+/798631/
+* {{TOC|align=right}}
+
+==Timeline==
+
+
+'''All times in UTC.'''
+
+* 11:40 <nowiki>https://gerrit.wikimedia.org/r/c/operations/puppet/+/798615/</nowiki> gets merged
+
+* 11:45 INCIDENT STARTS ​​<+jinxer-wm> (ProbeDown) firing: Service kibana7:443 has failed probes (http_kibana7_ip4) #page - [[Network monitoring#ProbeDown|https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown]] - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+
+* 11:45 John realises the patch broke apaches across mw hosts
+* 11:45 puppet gets disabled on mw hosts, preventing a wider outage
+* 11:46 The patch gets reverted and merged: <nowiki>https://gerrit.wikimedia.org/r/c/operations/puppet/+/797222</nowiki>
+* 11:47 A manual puppet run is forced on eqiad
+* 11:47 Multiple alerts arrive to IRC
+* 11:49 the revert doesn’t fix things and a manual cumin run is needed
+* 11:50  Incident opened.  <Manuel Arostegui> becomes IC.
+* [11:50:46] <_joe_> jbond: it seems it tries to listen on port 443
+* [11:51:16] <taavi> jbond: your patch makes apache2 listen on 443 regardless whether mod_ssl is enabled
+* 11:56: The following command is issued across the fleet:  sudo cumin -m async 'mw1396*' 'sed -i"" "s/Listen 443//" /etc/apache2/ports.conf '  'systemctl start apache2 ' 
+* 11:57: First recoveries arrive
+* 11:58 MW app servers fixed here
+* 12:05 The following patch is merged https://gerrit.wikimedia.org/r/c/operations/puppet/+/798631/ to get the proper fix in place for other non-mw servers relying on existing default debian configuration
+* 12:07 <_joe_> I am running puppet on people1003 (to test patch) - <_joe_> the change does the right thing there
+* 12:16 Other non-mw apaches fixed here:  < jbond> sudo cumin C:httpd 'systemctl status apache2.service &>/dev/null' is all good
+
+==Detection==
+
+* The first detection was by the engineer who merged the patch.
+* Later IRC alerts and pager.
+** ''<+jinxer-wm> (ProbeDown) firing: Service kibana7:443 has failed probes (http_kibana7_ip4) #page - [[Network monitoring#ProbeDown|https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown]] - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki>'' ''<+icinga-wm> PROBLEM - Apache HTTP on parse2001 is CRITICAL: connect to address 10.192.0.182 and port 80: Connection refused [[Application servers|https://wikitech.wikimedia.org/wiki/Application_servers]]''  ''<+icinga-wm> PROBLEM - Apache HTTP on mw1320 is CRITICAL: connect to address 10.64.32.41 and port 80: Connection refused [[Application servers|https://wikitech.wikimedia.org/wiki/Application_servers]]''  ''<+icinga-wm> PROBLEM - Apache HTTP on mw1361 is CRITICAL: connect to address 10.64.48.203 and port 80: Connection refused [[Application servers|https://wikitech.wikimedia.org/wiki/Application_servers]]''
+
+==Conclusions==
+During the Incident Review ritual, it was pointed out that if we had a way to deploy those changes in a controlled environment (e.g. canary) we could have been saved from this one. It was also noted that PCC did not catch this one as puppet complied this fine, it's just the resulting Apache configuration was unconditionally also listening on port 443.
+
+===What went well?===
+*The cause was quickly identified even before the alerts appeared
+*''cumin'' let us ran a command quickly across the fleet
+
+===What went poorly?===
+*A careful review of the patch should've been done
+*We don't have an environment to do a deployment of puppet changes in a controlled environment.
+
+===Where did we get lucky?===
+*Quickly identified the issue and the solution was clear.
+
+===How many people were involved in the remediation?===
+*3 SREs
+*1 Volunteer
+*1 IC
+
+==Links to relevant documentation==
+
+* [[Application servers]]
+* [[Cumin#Disable Puppet]]
+
+==Actionables==
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|No
+|At least 4 out of 5 are usual responders (Marostegui, jbond, _joe_, jynus)
+|-
+|Were the people who responded prepared enough to respond effectively
+|Yes
+|
+|-
+|Were fewer than five people paged?
+|No
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|No
+|N/A
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|Yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|Yes
+|
+|-
+|Was the public status page updated?
+|No
+|
+|-
+|Is there a phabricator task for the incident?
+|No
+|
+|-
+|Are the documented action items assigned?
+|No
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|No
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|No
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|Yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|Yes
+|
+|-
+|Were all engineering tools required available and in service?
+|No
+|At least Kibana and piwik/matomo where down
+|-
+|Was there a runbook for all known issues present?
+|No
+|
+|-
+! colspan="2" align="right" |Total score (c'''ount of all “yes” answers above)'''
+|5
+|
+|}

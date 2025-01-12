@@ -1,0 +1,45 @@
+
+
+==Summary==
+
+
+A Puppet patch (change 817307) was merged which would accidentally install confd on a significant number of production hosts. The Puppet provisioning for these confd installations failed half-way due to having no corresponding Icinga checks defined. This in turn fired an Icinga alert:
+ 10:44 <icinga-wm> PROBLEM - Widespread puppet agent failures on alert1001 is CRITICAL: 0.1057 ge 0.01 
+Engineers started work on reversing it, by cleaning up the inadvertent installs of confd via Cumin. Security posture was not compromised and there was no external user impact.
+
+Documentation:
+
+* puppet failures - https://logstash.wikimedia.org/goto/a5b60af08e257d90a469a78d12056ec2
+*Confd
+* Cumin
+
+==Actionables==
+
+* Git defaults to shows the author's date, not the commit date. Consider adding the following aliases to your git config as fix:
+** lola = log --graph --pretty=format:\"%C(auto)%h%d%Creset %C(cyan)(%cr)%Creset %C(green)%cn <%ce>%Creset %s\" --all
+** grephist = log --graph --pretty=format:\"%C(auto)%h%d%Creset %C(cyan)(%cr)%Creset %C(green)%cn <%ce>%Creset %s\" --all -S
+
+==Scorecard==
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	Overlap of 3
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	yes	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	yes	n/a
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	yes	n/a
+Process                                       	Was the incident status section actively updated during the incident?                                             	yes	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	no 	
+Process                                       	Are the documented action items assigned?                                                                         	yes	action items limited to improved local bash aliases
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	12 	

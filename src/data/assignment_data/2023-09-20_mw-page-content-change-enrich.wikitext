@@ -1,0 +1,159 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = https://phabricator.wikimedia.org/T346877
+| paged-num = 
+| responders-num = 1
+| coordinators = 1
+| start = 2023-09-19 15:00:00
+| end = 2024-09-20 12:00:00
+| metrics = https://wikitech.wikimedia.org/wiki/MediaWiki_Event_Enrichment/SLO/Mediawiki_Page_Content_Change_Enrichment
+| impact = There was no impact on the application SLO. This incident manifested on the passive DC deployment. The active DC deployment had no SLI degradation. Clients were not affected.
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->The mw-page-content-change-enrich (flink) app is failing to start in eqiad (passive DC because of a network timeout on a dependent service (thanos-swift) <nowiki>https://logstash.wikimedia.org/goto/ce1765e186329ed74f179d375f8df182</nowiki>.
+
+The app needs swift for HA. The connection failure caused the k8s operator to fail startup. The incident was caused by incorrect egress rules. Since the app is DC agnostic, egress rules must be set for both DCs ip ranges for all deployments.
+
+This issue was fixed by applying the proper egress rules, a re-deploying the application. The active DC deployment was not affected.{{TOC|align=right}}
+
+==Timeline==
+
+
+''All times in UTC.''
+
+*2023-09-19 15:00:00 alerts fire
+*2023-09-20 09:10:05 gehel escalates to gmodena (#wikimedia-analytics). Troubleshooting starts.
+*2023-09-20 09:42:23 issue is identified
+*2023-09-20 09:46:14 triage with claime (#wikimedia-data-persistence), patch is prepared for review
+*2023-09-20 12:00:00 patch has been deployed 
+*
+
+<!-- Reminder: No private information on this page! -->There was no user visible outage.
+==Detection==
+Alerts where fired based on prometheus metrics. 
+
+The issue was escalated to the DRI.
+
+==Conclusions ==
+
+* there was no user visible outage.
+* only passive DC was affected.
+* mw-page-content-change-enrich egress rules to thanos were misconfigured.
+* we never encountered this issue before, because swift-thanos was pooled in both eqiad and codfw.
+* during DC switchover swift-thanos was depooled from eqiad.
+* the network route issue manifested.
+
+===What went well?===
+
+* gehel was proactive in escalating the incident to the DRI.
+* instrumentation and logs supported troubleshooting.
+* claime (#wikimedia-data-persistence) promptly helped to triage the issue.
+
+===What went poorly?===
+
+* lead time to escalation could have been shorter.
+* Early critical alerts went unnoticed by the application DRIs.
+
+===Where did we get lucky?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* …
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,108 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T305119
+| paged-num = 17
+| responders-num = 2
+| coordinators = n/a
+| start = 2022-03-31 05:18
+| end = 2022-03-31 05:40
+| metrics = No relevant SLOs exist. The API Gateway SLO was unaffected. If the planned app server SLO existed, we would have consumed a small portion of its error budget.
+| impact = For 22 minutes, API server and app server availability were slightly decreased (~0.1% errors, all for s7-hosted wikis such as Spanish Wikipedia), and the latency of API servers was elevated as well.
+}}
+
+After a code change [https://gerrit.wikimedia.org/r/c/mediawiki/core/+/773915] [https://gerrit.wikimedia.org/r/c/mediawiki/extensions/CentralAuth/+/773913] rolled out in this week's train, the GlobalUsersPager class (part of CentralAuth) produced expensive DB queries that exhausted resources on [[S7|s7 database]] replicas.
+
+Backpressure from the databases tied up PHP-FPM workers on the API servers, triggering a paging alert for worker saturation. The slow queries were identified and manually killed on the database, which resolved the incident.
+
+Because the alert fired and the queries were killed before available workers were fully exhausted, the impact was limited to s7. Full worker saturation would have resulted in a complete API outage.
+
+Because only two engineers responded to the page and the response only took half an hour, we decided not to designate an incident coordinator, start a status doc, and so on. We didn't need those tools to organize the response, and they would have taken time away from solving the problem.
+
+'''Documentation''':
+* [https://phabricator.wikimedia.org/T305119 Phabricator task detailing the slow query]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1648702800000&to=1648706400000&var-datasource=eqiad%20prometheus%2Fops&var-cluster=api_appserver&var-method=GET&var-code=200 API server RED dashboard showing elevated latency and errors; php-fpm workers peaking around 75% saturation; and s7 database errors]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1648702800000&to=1648706400000&var-datasource=eqiad%20prometheus%2Fops&var-cluster=appserver&var-method=GET&var-code=200 Same dashboard for the app servers showing measurable but lesser impact]
+
+==Actionables==
+
+* Revert the patches generating the slow queries - done [https://sal.toolforge.org/log/J7Yi4H8Ba_6PSCT9nWWR] [https://sal.toolforge.org/log/Wigp4H8B8Fs0LHO5M3s9]
+* Later (2022-04-06) it was discovered the query killer was using the old 'wikiuser' name, which prevented it from acting. Fixed in [https://gerrit.wikimedia.org/r/c/operations/software/+/777760], deploying soon.
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|paged via batphone
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|paged via batphone
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|paged via batphone
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|1
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|9
+|
+|}

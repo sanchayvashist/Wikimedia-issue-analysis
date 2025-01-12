@@ -1,0 +1,171 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+[[File:CirrusSearch reject failures 2023-06-18.png|thumb|Number of rejections per minute during the outage]]
+{{Incident scorecard
+| id = 2023-06-18 search broken on wikidata and commons
+| task = T339810
+| paged-num = 2
+| responders-num = 3
+| coordinators = David Causse, Antoine Musso
+| start = 2023-06-17 11:30:00
+| end = 2023-06-18 10:02:00
+| metrics = No relevant SLO exists, https://grafana.wikimedia.org/d/000000455/elasticsearch-percentiles?orgId=1&from=1686984075233&to=1687091044344&viewPanel=9
+| impact = Search broken on wikidata and commons
+}}
+
+…
+
+As part of the work done in [[phab:T334194|T334194]] a reindex of the Elasticsearch indices for Wikibase enabled wikis (wikidata and commons) was scheduled. Reindexing is a routine task the search teams uses to enable new settings at the index level (generally to tune how languages are processed). For this particular task the reason was to optimize the number of analyzers created on these wikis by de-duplicating them (300+ languages). De-duplicating analyzers means that any code referring to a particular analyzer might now possibly reference one that was de-duplicated and thus non-existent. The Search Team analyzed such cases and found nothing problematic scanning the code-base. This was untrue, after the Wikidata reindex was done when the new index was automatically promoted to production the fulltext search queries started to fail. Reason is that the ''token_count_router'' query was still referencing the ''text_search'' analyzer directly which was now nonexistent because de-duplicated. The ''token_count_router'' is a feature that counts the number of token in a query to help not run costly phrase queries on queries that has too many tokens.
+
+Mitigations that were evaluated:
+
+* disabling the ''token_count_router'' could have fixed the immediate problem but could have put the whole cluster under the risk of being overloaded by such pathological queries.
+* reverting the initial feature was not possible since it requires a full re-index of the wiki (long procedure, 10+hours)
+* adding the ''text_search'' analyzer manually on the wikidata and commons indices could have fixed the issue but required closing the index which is a heavy maintenance task (search traffic switching).
+* fix the ''token_count_router'' to not reference the ''text_search'' analyzer directly, one-liner. This approach was preferred.
+
+{{TOC|align=right}}
+
+==Timeline==
+''Friday, June 16:''
+
+*21:40 The CirrusSearch reindex procedure is started on all Wikibase related wikis [[phab:T334194|T334194]]
+Saturday, June 17:
+*11:30 '''OUTAGE STARTS''' The number of CirrusSearch failures starts to rise. Users start to report the problem [[Wikidata:Wikidata:Project_chat#Search_broken]], [[phab:T339810|T339810]]. Users can no longer search on wikidata and commons.
+*22:07 End user Snowmanonahoe files [[phab:T339810|T339810]].
+Sunday, June 18
+*05:39 Legoktm in #mediawiki_security IRC channel: search is apparently broken on both Commons and Wikidata? T339811 & T339810
+*06:37 Hashar casually browse IRC, become aware of the problem and start investigating "sounds like a Sunday Unbreak Now".
+*06:37 - 9:00 Hashar does a first pass investigation (logs on T339810) and concludes: MediaWiki errors dashboard barely shows anything beside a few errors to Special:MediaSearch. looks like the ElasticSearch index `wikidatawiki_content` is borked: <code>All shards failed for phase: [query]</code> <code>[Unknown analyzer [text_search]]; nested: IllegalArgumentException[Unknown analyzer [text_search]];</code>  <code>Caused by: java.lang.IllegalArgumentException: Unknown analyzer [text_search]</code>
+*07:00 Hashar explicitly skips calling SRE on call and call directly the search team members in Europe: Gehel and dcausse 
+*<sync delay to reach people, reach out a computer etc)
+*08:00 dcausse says that a revert is not possible (would require a re-index of the wikidata and commons index), a one-liner fix is preferred
+*8:15 patches proposed to Gerrit
+*<delay due to IRL things>
+*9:20 Hashar and Dcausse jump in a video call to synchronize the backport and deployment of fixes
+*9:29 fixes pulled on mwdebug1001 and are tested there
+*9:50 WikibaseCirrusSearch fix is deployed. The error traffic is dramatically reduced.
+*10:02 CirrusSearch fix is deployed. The few remaining errors (Special:Mediasearch) vanishes.
+*10:02 '''OUTAGE ENDS''' A fix is deployed to the production wikis
+
+<!-- Reminder: No private information on this page! -->==Detection==
+The problem was detected by users and then raised on IRC via the #mediawiki_security channel.
+
+==Conclusions ==
+The reindex maintenance procedure can promote a ''broken'' index to production causing immediate failures on the affected wikis. It could possibly try to generate a couple representative queries and make sure that they run before doing such promotion?
+
+===What went well?===
+
+* Finding the direct contacts is easy (Antoine already had David and Guillaume phone numbers in his phone anyway)
+* The fixes were small patches
+* We have extensive logging and once the proper dashboard and filter is found the error standed out
+
+===What went poorly?===
+
+* No alarms got raised despite an elevated stream of logged errors
+* The reindex maintenance script promoted the new wikidata index on a week-end
+* The task has not been immediately identified as an Unbreak Now priority.
+
+===Where did we get lucky?===
+
+* Legoktm mentioned it and Antoine looked at IRC on a Sunday morning
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* [[phab:T339939]] Add alerting on the number of CirrusSearch failures (rejected), the problem was detected by users
+* [[phab:T339938]] Consider running some test queries before switch index aliases$
+* [[phab:T339935]] Consider testing a few wikibase queries from the integration tests 
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|?
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|SRE was explicitly skipped in favor of reaching out directly to Search Team
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|It was a Sunday
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|We used T339810
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|Since SRE got skipped
+|-
+|Is there a phabricator task for the incident?
+|yes
+|T339810
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|IRC + Google Meet
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,120 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = sre
+| responders-num = 3
+| coordinators = 0
+| start = 2022-03-06 13:50
+| end = 2022-03-06 17:24
+| impact = For 1.5 hour, some requests to the public Wikidata Query Service API were sporadically blocked.
+}}
+The service got overloaded and started to block client traffic, including Pybal which ultimately triggered the page.  Icinga sent some non-paging alerts at 13:50 but paging alerts didn't get sent until 16:52.
+
+== Timeline ==
+
+* 13:50 Icinga alerts about <code>CRITICAL - CRITICAL - wdqs-heavy-queries_8888</code> - '''none paging'''
+* 16:52 Icinga notifies about Wikidata Query Service wdqs eqiad - '''outage starts, paging'''
+* 16:57 Icinga notifies about Wikidata Query Service wdqs eqiad - '''paging'''
+* 17:02 Icinga notifies about Wikidata Query Service wdqs eqiad - '''paging'''
+* 17:05 joe restarts <code>wdqs1006</code>
+* 17:07 Icinga notifies about Wikidata Query Service wdqs eqiad - '''paging'''
+* 17:07 load on <code>wdqs1006</code> increases to 120
+* 17:15 jbond tries to reach search team, contacted gehel
+* 17:17 gehel comes online
+* 17:21 jbond restart wdqs services (at gehels request) clusterwide (<code>wdqs::public</code>)
+* 17:24 RECOVERY messages in -operations  - '''outage ends'''
+
+'''Documentation''':<syntaxhighlight lang=text>
+02:15:05.481 [qtp2137211482-702147] INFO  o.w.q.r.b.t.ThrottlingFilter - A request is being banned. req.requestURI=/bigdata/namespace/wdq/sparql, req.xForwardedFor=10.64.1.19, req.queryString=query=%20ASK%7B%20%3Fx%20%3Fy%20%3Fz%20%7D, req.method=GET, req.remoteHost=localhost, req.requestURL=http://localhost/bigdata/namespace/wdq/sparql, req.userAgent=Twisted PageGetter
+
+</syntaxhighlight>
+
+* Fix required restarting the wdqs services on the cluster<syntaxhighlight lang="bash">
+sudo cumin -b 1 -s 1 O:wdqs::public 'systemctl restart wdqs-blazegraph wdqs-categories wdqs-updater'
+
+</syntaxhighlight>
+
+==Actionables==
+
+* To make that service stable is to re-architect and replace Blazegraph.  The Search team will discuss this and arrange follow up actions
+* In the meantime, https://phabricator.wikimedia.org/T293862 might help to improve the reliability of Blazegraph.
+* Investigate if earlier alerts should page https://phabricator.wikimedia.org/T303134
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|as weekend
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|?
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|6
+|
+|}

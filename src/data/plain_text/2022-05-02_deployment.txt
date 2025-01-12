@@ -1,0 +1,40 @@
+
+
+==Summary==
+
+
+
+Parts of /srv/deployment were lost on active deployment server (deploy1002) due to the wrong command, rm -rf, being executed. This halted deployments for some time, until we were able to restore the directory from a backup and we checked it for correctness.
+
+Documentation:
+*T307349
+*Bacula backups
+
+==Actionables==
+
+* https://phabricator.wikimedia.org/T309162
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	/  	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	/  	
+Process                                       	Was the incident status section actively updated during the incident?                                             	no 	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	no 	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	no 	
+Tooling                                       	Were all engineering tools required available and in service?                                                     	yes	
+Tooling                                       	Was there a runbook for all known issues present?                                                                 	yes	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

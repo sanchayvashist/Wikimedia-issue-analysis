@@ -1,0 +1,185 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T325477
+| paged-num = 34
+| responders-num = 6 (initial page, later others took over final corrections)
+| coordinators = Jcrespo
+| start = 2022-12-18 17:58:00
+| end = 2022-12-18 18:22:00
+| metrics = ?
+| impact = All API users experienced 5XX errors (11-12 thousand errors per second) or unreasonable latencies for 24 minutes. After that, there was degraded performance in the form of increased -but more reasonable- latency for around 3 hours. Edit rate got low during the 24 minute hard outage period, but recovered quickly after it (to a higher level than usual).
+}}
+
+For approximately 24 minutes, uncached calls to the API on the eqiad datacenter overloaded the application servers, running out of threads (all busy) creating unreasonable latency or failing to respond to requests. This caused sending errors to some clients using the action API and Parsoid in the primary datacenter. Elevated latencies persisted for the following 3 hours, when traffic load organically went down.
+
+This was caused by the DiscussionTools MediaWiki extension adding a ResourceLoader module on almost all page views -even non-discussion pages- which created an API call, that, combined with a significant 50% increase in overall traffic, led to an overload and increased latencies on the API cluster. codfw app server cluster was mostly unaffected due to not receiving POST uncached traffic at the time (it is read-only).
+
+{{TOC|align=right}}
+
+==Timeline==
+
+[[File:World cup traffic increase.png|thumb|right|Increased (around 50%) traffic on both text and eqiad cluster, trigger of the subsequent issues]]
+[[File:Discussiontools load world cup.png|thumb|right|Excesive load created by the Discussiontools module, taking more execution time than even ''query'' and ''parse'', the underlying issue]]
+[[File:API appserver eqiad busy workers and status codes world cup.png|thumb|right|Direct cause of the outage: running out of available API workers to execute user's requests, leading to errors and latencies]]
+[[File:API appserver eqiad latencies world cup.png|thumb|right|Increased latences during the outage, and also after the saturation got resolved]]
+[[File:Edit_rate_during_World_Cup.png|thumb|right|Edit rate during the World Cup final: it had elevated values except during the hard outage, probably due to editing bots being affected by the API POST and Parsoid/JS API calls being down]]
+[[File:Parsercache_hit_ratio.png|thumb|right|Metrics show a dramatic increase in parsing requests after the 8th deploy and a recovery after the 19th fix]]
+
+''All times in UTC.''
+
+=== 8 December 2022 ===
+
+* 22:17 <samtar@deploy1002> Started scap: Backport for [[gerrit:866502|Start mobile DiscussionTools A/B test (T321961)]] High traffic is observed (retroactively, on the 19th) to action=discussiontoolspageinfo, with a daily peak of around 2k req/s.
+
+=== 18 December 2022 ===
+*17:55 Argentina scores the penalty that awards their national team the World Cup. A 50% traffic increase starts (we had larger spikes in the past, though, causing no load issues)
+*17:58 API app servers get overload with requests '''OUTAGE STARTS HERE'''
+*17:59 4 pages are sent: PHPFPMTooBusy (api_appserver & parsoid) / FrontendUnavailable (HAProxy & varnish)
+*18:XX Thinking it is load related, a restart is considered not the right move at the moment
+*18:20 App servers are attempted to be restarted in a desperate attempt to fix something, failing <code>END (FAIL) - Cookbook sre.mediawiki.restart-appservers (exit_code=99)</code>
+*18:22 Load goes down enough for worker threads to not be 100% busy '''OUTAGE ENDS''' (but degraded state with increased latencies persist)
+*18:55 A rolling restart is finally run to try to improve the latency issues: <code>sudo cumin -b 1 -s 30 'A:mw-api and A:eqiad' 'restart-php7.4-fpm'</code>
+*19:31 Rolling restart finishes, latencies still high
+*19:42 DiscussionTools is suspected to be the culprit based on utilization metrics, but there is no one around to debug
+*19:46 Latencies -due to organic traffic reduction, not to any action taken- decrease to a degraded, but not outage-like state. It is decided to set the ongoing outage as "resolved" and ask for debugging help the following day.
+
+=== 19 December 2022 ===
+*03:08 tstarling@deploy1002: Synchronized wmf-config/InitialiseSettings.php: disable wgDiscussionToolsABTest {{phab|T325477}} {{phab|T321961}} (duration: 15m 23s)
+*09:15 ladsgroup@deploy1002: Finished scap: Backport for [[gerrit:868867|Emergency: discussiontoolspageinfo return empty response in non-talk ns (T325477)]] (duration: 09m 24s)
+*10:28 taavi@deploy1002: Finished scap: Backport for [[gerrit:868869|Only preload getPageData if there's thread data for the page (T325477)]] (duration: 07m 58s)
+(any one of these three patches would have resolved the issue)
+
+==Detection==
+
+Monitoring and paging worked as intended, paging everybody (it was a weekend) as soon as the issue become major at 17:56:
+
+* 17:59 Service: [FIRING:1] ProbeDown (10.2.2.22 ip4 api-https:443 probes/service http_api-https_ip4 ops page eqiad prometheus sre)
+* 18:00 Service: [FIRING:1] PHPFPMTooBusy api_appserver (ops php7.4-fpm.service page eqiad prometheus sre)
+* 18:00 Service: [FIRING:1] FrontendUnavailable (varnish-text page thanos sre)
+* 18:01 Service: [FIRING:1] FrontendUnavailable cache_text (page thanos sre)
+
+A [https://phabricator.wikimedia.org/T325477 task] was created also by a community member at 19:03, when the team was already analyzing the issue.
+
+However, there were reports that "php fpm busy has been flapping all weekend, just not enough to page".
+
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* Multiple people reacted to page although it was during World Cup finals
+* Good insights with monitoring helped in pinpointing DiscussionTools as potential incident cause and World Cup traffic as the modulator
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* Traffic spike due to World Cup was quite a surprise although the event was scheduled beforehand for month
+* Knowledge and documentation of sre.mediawiki.restart-appservers cookbook (SERVICE name unknown). It took a while to find the cumin + "restart-php7.4-fpm" approach
+* Increased load following the 8 December deployment was not noticed or not connected to the deployment
+* Outage was caused by a known problem documented in a TODO comment [[phab:T325477#8476954|T325477#8476954]]
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* Traffic declined naturally and incident resolved automatically
+* DoS between 18:17 and 18:36 had no big impact on performance(?), rate limiting worked(?)
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+[[Service restarts#Application servers (also image/video scalers and job runners and parsoid)]]
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+* {{phab|T325739}} Fix sre.mediawiki.restart-appservers cookbook and doc {{done}}
+* Patch {{gerrit|869169}} {{done}}
+* Patch {{gerrit|869163}} {{done}}
+* {{Phab|T325598}}: Avoid uncached action=discussiontoolspageinfo API calls on page load {{done}}
+* {{phabricator|T321961}} {{done}}
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|no
+|SRE had no insight into existence of the DiscussionTools ongoing A/B Test
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|https://www.wikimediastatus.net/incidents/2w4ygdj4vc20
+|-
+|Is there a phabricator task for the incident?
+|yes
+|[[phab:T325477|T325477]]
+|-
+|Are the documented action items assigned?
+|yes
+|see above also completed so this incident doesn't repeat
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|Outage was caused by a known problem documented in a TODO comment T325477#8476954
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|runbook failed
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|8
+|
+|}

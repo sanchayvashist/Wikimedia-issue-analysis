@@ -1,0 +1,148 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T307647
+| paged-num = 14
+| responders-num = 4
+| coordinators = Due to the low amount of people responding there was no IC
+| start = 05:36
+| end = 05:55
+| impact = For 20 minutes, all wikis were unreachable for logged-in users and non-cached pages.
+}}
+
+A schema change ([[phab:T307501]]) made mariadb's optimizer change its query plan and made a very frequent query to globalblocks table on centralauth database (s7) to take 5 seconds instead of less than a second.
+
+{{TOC|align=right}}
+
+==Timeline==
+'''All times in UTC.'''
+
+*05:35 Schema change deployed
+*05:36 '''Outage starts here''' (gradual increase on latency, decrease on regular app server traffic)
+*05:39 <jinxer-wm> (ProbeDown) firing: (10) Service appservers-https:443 has failed probes (http_appservers-https_ip4) - [[Network monitoring#ProbeDown|https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown]] - [https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http&#x20;-&#x20;https://alerts.wikimedia.org/?q=alertname%3DProbeDown <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki>]
+*05:39 <legoktm> I can't load enwp
+*05:39 <legoktm> or it's very slow
+*05:40 <icinga-wm> PROBLEM - High average POST latency for mw requests on appserver in eqiad on alert1001 is CRITICAL: cluster=appserver code=200 handler=proxy:unix:/run/php/fpm-www.sock https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=9&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=appserver&var-method=POST
+*05:40 marostegui notices db1127 to be unavailable and he depools it
+*05:41 _joe_ and marostegui start debugging, confirming all servers are stuck at [0x00007fbcc9e1ee20] query() /srv/mediawiki/php-1.39.0-wmf.9/includes/libs/rdbms/database/DatabaseMysqli.php:49, confirming it is a database issue
+*05:44 CDN start to spike on 5XX errors
+*05:45 Ongoing schema changes are stopped by Amir. Issue is narrowed down to s7 section queries.
+*05:45 marostegui mentions https://gerrit.wikimedia.org/r/c/mediawiki/extensions/GlobalBlocking/+/785376/1/sql/mysql/patch-globalblocks-timestamps.sql#7  suggesting it as the cause. The query suspected that is causing it is: SELECT /* MediaWiki\Extension\GlobalBlocking\GlobalBlocking::getGlobalBlockingBlock  */  gb_id,gb_address,gb_by,gb_by_wiki,gb_reason,gb_timestamp,gb_anon_only,gb_expiry,gb_range_start,gb_range_end  FROM `globalblocks`	WHERE (gb_range_start  LIKE '5B85%' ESCAPE '`' ) AND (gb_range_start <= '5B85B2D2') AND (gb_range_end >= '5B85B2D2') AND (gb_expiry > '20220505054805');
+*05:46 The status page is updated by _joe_ https://www.wikimediastatus.net/incidents/xzmd6vwvvgmx
+*05:48 <icinga-wm> RECOVERY - PHP7 rendering on mw1329 is OK: HTTP OK: HTTP/1.1 302 Found - 650 bytes in 7.305 second response time [[Application servers/Runbook#PHP7%20rendering|https://wikitech.wikimedia.org/wiki/Application_servers/Runbook%23PHP7_rendering]]
+*05:50 Schema change is rolled back by Marostegui. T307501#7905692
+*05:51 Median App server latency & CDN errors starts going down
+*05:52 <legoktm> wiki is working again for me
+*05:55 App server latency and CDN 5XX errors go back to normal levels - '''OUTAGE ENDS HERE'''
+
+==Detection==
+
+* Alerts (IRC and pages)<syntaxhighlight lang=irc>
+[05:39:18]  <+jinxer-wm> (ProbeDown) firing: (10) Service appservers-https:443 has failed probes (http_appservers-https_ip4) - https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+[05:39:18]  <+jinxer-wm> (ProbeDown) firing: (20) Service appservers-https:443 has failed probes (http_appservers-https_ip4) #page - https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+[05:40:04]  <+icinga-wm> PROBLEM - High average POST latency for mw requests on appserver in eqiad on alert1001 is CRITICAL: cluster=appserver code=200 handler=proxy:unix:/run/php/fpm-www.sock https://wikitech.wikimedia.org/wiki/Monitoring/Missing_notes_link https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=9&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=appserver&var-method=POST
+[05:40:10]  <+icinga-wm> PROBLEM - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page on alert1001 is CRITICAL: 0.07182 lt 0.3 https://bit .ly/wmf-fpmsat https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=54&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=api_appserver
+[05:40:14]  <+icinga-wm> PROBLEM - High average GET latency for mw requests on api_appserver in eqiad on alert1001 is CRITICAL: cluster=api_appserver code=200 handler=proxy:unix:/run/php/fpm-www.sock https://wikitech.wikimedia.org/wiki/Monitoring/Missing_notes_link https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=9&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=api_appserver&var-method=GET</syntaxhighlight>
+* User reported it on IRC
+
+==Conclusions==
+===What went well?===
+*The root cause was quickly identified and the revert was easy and fast to apply.
+
+===What went poorly?===
+*By pure bad luck an easy schema change resulted on the optimizer changing its behaviour
+*Not many people showed up despite of being paged and this being a full outage
+
+===Where did we get lucky?===
+*The revert was easy and fast to apply as the table is quite small
+
+===How many people were involved in the remediation?===
+*2 DBAs and 1 SRE
+
+==Links to relevant documentation==
+
+* https://www.wikimediastatus.net/incidents/xzmd6vwvvgmx
+* How to deploy a schema change: [[Schema changes]]
+* There is no documentation on how to revert a schema change, as it is basically running the reverse command to leave the table as it was before.
+
+==Actionables==
+*Investigate the mariadb optimizer behaviour for this specific table: https://phabricator.wikimedia.org/T307501
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|There is no way to prevent this
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|We don't really need it
+|-
+! colspan="2" align="right" |Total score
+|8
+|
+|}

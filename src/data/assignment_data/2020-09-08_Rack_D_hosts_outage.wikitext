@@ -1,0 +1,23 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+A power cable issue in asw2-d3-eqiad during a scheduled PDU upgrade, caused hosts in racks D1, 3, 4 to be unavailable (13:34 UTC). It rebooted into a different firmware image than the rest of the switches and had to be upgraded; once this happened, all hosts were again available (15:02 UTC).
+
+'''User impact''': Wikifeeds was not working properly; Horizon unavailability meant that creation and updating of WMCS images was broken; dns1002 was flapping, causing sporadic dns lookup failures for eqiad hosts; logins failed to stat1005, stat1006.
+
+'''Other impact''': kafka-jumbo1006 being unavailable meant that some data was lost for webrequest and EventLogging topics; some bacula full backups had errors and failed to run and the director had to be restarted; ferm was broken on about 30 hosts that were running puppet when DNS connectivity was lost/resolution failed and had to be manually restarted
+<!-- Reminder: No private information on this page! -->
+
+== Actionables ==
+* Create icinga hostgroup per rack row / Can we make row/rack visible in icinga tactical overview of hosts down somehow? (Akosiaris)
+* Investigate why asw-d3-eqiad rebooted into a different boot partition with different JunOS version, causing it to be “inactive” in the VCF - and prevent this from happening again - https://phabricator.wikimedia.org/T262290
+** Run “show system snapshot media internal ” and “request system snapshot slice alternate” on all EX switches
+* Wikifeeds (and as a consequence, its endpoint for restbase) basically went down until the network issues in eqiad were resolved. Figure out what the hidden dependency is there. (Akosiaris)
+* Investigate why routing around a missing switch member D3 did not work, hosts in D1, D2, D4 (at least) were also impacted - https://phabricator.wikimedia.org/T256112
+* Check Anycast configuration as it seemed the flapping connections caused a few issues with dns1002 - https://phabricator.wikimedia.org/T262372
+* Rsyslog deliveries to cengit trallog must fail independently - https://phabricator.wikimedia.org/T226703

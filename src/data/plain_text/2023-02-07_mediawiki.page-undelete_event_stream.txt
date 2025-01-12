@@ -1,0 +1,63 @@
+
+
+== Summary ==
+
+
+
+We are not aware of all consumers of this stream.  No one noticed this change for over 3 months.  
+
+Root Cause
+
+The developer (Andrew Otto) and reviewers did not catch the accidental change to extension.json that unregistered the EventBusHooks:onPageUndelete hook handler.
+
+Affected Datasets and Services
+
+The main fallout is that WDQS and WCQS will have inconsistencies in their downstream datastores: any wiki pages that were undeleted during this time period will not be available in WDQS. There may be exceptions to this, the WDQS updater is supposed to detect inconsistencies (i.e. getting an edit on a deleted page) and apply some reconciliation but apparently this system did not work as expected here. Resolving the inconsistencies for WDQS will be achieved via full data-reload (something that was already in progress).
+
+There may be other affected services as well.  The event.mediawiki_page_undelete table in Hive will be empty for this time.  We also expose this stream publicly via stream.wikimedia.org, so if there are external consumers (Internet Archive?) they will also have missed these page undelete events.
+
+
+
+==Timeline==
+All times in UTC.
+
+*2022-10-31 Andrew Otto merges a change to EventBus extension that causes mediawiki.page-undelete events to not be sent.  This is deployed over the next week as part of the MediaWiki deployment train.
+*2023-02-07 - A user reports inconsistencies in WDQS results.  David Cause asks Andrew Otto about any known issues with mediawiki.page-undelete.
+*2023-02-07 - Andrew Otto discovers the mistake, pushes a fix, and has the fix deployed in a backport deploy window.
+*2023-02-07 -  OUTAGE ENDS
+
+==Links to relevant documentation ==
+
+* Event*#EventBus
+
+
+==Actionables==
+
+* Add automated stream throughput alerting: T329070
+* Review the “reconciliation” mechanism of the WDQS updater to understand why it was not able to recover these missing events after further edits on the affected entities and fix it: T329089 
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	yes	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	   	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	no 	
+Process                                       	Are the documented action items assigned?                                                                         	no 	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	no 	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

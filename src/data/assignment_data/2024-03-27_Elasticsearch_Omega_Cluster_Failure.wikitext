@@ -1,0 +1,136 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T361288
+| paged-num = 0
+| responders-num = 3
+| coordinators = Brian King
+| start = Wed Mar 27 21:45:03 2024
+| end = Wed Mar 27 23:59 2024
+| impact = From Wed Mar 27 21:34:03 2024 to Wed Mar 27 23:59 2024 , users connecting to the CODFW omega cluster (comprised of ~1600 smaller wikis) were unable to search these wikis. Edits to the pages during this time were not added to search indices. Larger wikis were not affected. CODFW was the non-primary datacenter and thus was not receiving the bulk of user traffic.
+}}
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*2024-03-27 21:34:03 2024 Brian King (Search Platform SRE) merges a puppet patch that removes omega masters in preparation for decom. Once Puppet is run, soon-to-be-decommed master hosts are firewalled off from the cluster, making it impossible for them to participate in leader election.
+*2024-03-27 21:45:42 Brian King (Search Platform SRE) [https://phabricator.wikimedia.org/T358882#9667270 runs] sre.hosts.decommission cookbook for elastic2037-2054.
+*~2024-03-27 22:00  Ryan Kemper (Search Platform SRE) notices a "master not discovered exception" (503) from the CODFW omega endpoint
+*2024-03-27 23:04:41,721 realizing the problem is related to decom work, Brian types "abort" into the cookbook prompt. It stops the network change that it was displaying, but it continues to wipe the disk of one of the active masters (elastic2052).
+*After several attempts to fix cluster state, Brian, Ryan, and Erik (Search Platform SWE) decide to depool CODFW omega and reconvene the next day.
+*~Wed Mar 27 23:59 2024 [[gerrit:c/operations/mediawiki-config/+/1015157|Patch]] is merged to force omega traffic to eqiad; impact ends
+*Thurs Mar 28 1300 UTC CODFW Brian restores quorum to the cluster using [[Search#Cluster Quorum Loss Recovery Procedure|this procedure]]
+*TBA CODFW omega repooled (depends on [[gerrit:c/operations/mediawiki-config/+/1015393|this patch]] being merged/deployed)
+
+==Detection==
+Humans noticed the problem immediately, as it was directly caused by operator error.
+
+No alerts had time to fire.
+
+==Conclusions ==
+
+===What went well?===
+
+* Humans noticed the problem immediately and were able to mitigate it.
+
+===What went poorly?===
+
+* Unexpected cookbook behavior
+* Too many hosts decommissioned at once, should probably have broken these up into batches.
+
+===Where did we get lucky?===
+
+* The problem only affected a small cluster in the inactive datacenter.
+
+==Links to relevant documentation==
+
+* [[Search#Cluster Quorum Loss Recovery Procedure]]
+* [[Search#Adding new masters/removing old masters]]
+
+==Actionables==
+
+* Update docs (done, see "relevant documentation" section above)
+* All other action items listed in https://phabricator.wikimedia.org/T361288
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|N
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|Y
+|
+|-
+|Were fewer than five people paged?
+|Y
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|NA
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|NA
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|NA
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|NA
+|
+|-
+|Is there a phabricator task for the incident?
+|Y
+|
+|-
+|Are the documented action items assigned?
+|Y
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|Y
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|N
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|Y
+|
+|-
+|Did existing monitoring notify the initial responders?
+|NA
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|Y
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|N
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

@@ -1,0 +1,103 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T309957
+| paged-num = 0
+| responders-num = 4
+| coordinators = XioNoX
+| start = 2022-06-21 14:32:00
+| end = 2022-06-21 14:43:00
+| impact = For 11 minutes, one of the Codfw server racks lost network connectivity. Among the affected servers was an LVS host. Another LVS host in Codfw automatically took over its load balancing responsibility for wiki traffic. During the transition, there was a brief increase in latency for regions served by Codfw (Mexico, and parts of US/Canada).
+}}
+
+[[File:Screenshot 20220621 185358.png|thumb|right|Codfw app servers suffered increased latency during the incident. The latencies affected only internal monitoring (health checks) because Codfw was not serving application traffic at this time.|320x320px]]During regular maintenance, there was a (scheduled) loss of power redundancy on the codfw-A1 server rack around 14:32:00 UTC.
+
+While the servers in this rack did not lose power (given a redundant power supply), they ''did'' fully lose network connectivity and thus effectively went down. This happened because the second power cable for the ASW network switch was not plugged all the way in, resulting in an unscheduled full loss of the switch for that rack, and hence the rack's network connectivity.
+
+Happily, higher-level service redundancy worked as expected:
+* regarding [[LVS]], lvs2010 automatically took over from lvs2007, for CDN traffic to [[Codfw data center|Codfw]]. There was a very temporary increase on response latency for on-the-fly Codfw requests until traffic stabilized.
+* ns1 [[DNS]] server was automatically moved to Eqiad, should not have any user impact.
+* Most A2 servers alerted about loss of power redundancy, but having 2 power supplies they didn't go down.
+* App servers could have been affected more, latency-wise while they were automatically depooled, but they were not serving production traffic at this time as [[Eqiad data center|Eqiad]] is the primary DC.
+
+After the secondary power cord was properly connected, connectivity recovered with no issues. Maintenance finished at 15:01.
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|Not paging
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|Not paging
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|Not paging
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|No working doc
+|-
+|Was the public status page updated?
+|no
+|not user facing
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|8
+|
+|}

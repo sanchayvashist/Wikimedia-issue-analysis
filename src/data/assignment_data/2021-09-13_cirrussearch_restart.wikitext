@@ -1,0 +1,32 @@
+{{irdoc|status=final}}
+== Summary ==
+Applying a change to our cirrus elasticsearch systemd unit triggered puppet to automatically restart the associated elasticsearch services. Sufficient number of hosts (6) were having puppet-agent ran simultaneously to drop the cluster into yellow and then red status; the large bandwidth/resources required to reschedule and assign shards when the respective elasticsearch services came back up on each host likely contributed to general cluster instability leading to a cascading failure scenario.
+
+Elasticsearch itself did its job in coming back and immediately recovering shards, but given the volume of hosts restarted, it took about 40 minutes for the impact to users to become largely invisible, and 2 hours and 5 minutes for a full recovery of the backend (i.e. green cluster status).
+
+* 16:18 Puppet change touching cirrus elasticsearch systemd units merged: https://gerrit.wikimedia.org/r/c/operations/puppet/+/720667
+* 16:23 operator runs puppet manually on <code>elastic2052</code>, confirmed elasticsearch service came back up properly
+* 16:25 operator runs puppet on rest of fleet, 6 hosts at a time: <code>sudo cumin -b 6 'P{elastic*}' 'sudo run-puppet-agent'</code>
+* 16:29 <code>PROBLEM - PyBal backends health check on lvs1015 is CRITICAL: PYBAL CRITICAL - CRITICAL - search-psi-https_9643: Servers elastic1059.eqiad.wmnet, elastic1049.eqiad.wmnet, elastic1044.eqiad.wmnet, elastic1048.eqiad.wmnet, elastic1052.eqiad.wmnet, elastic1047.eqiad.wmnet, elastic1067.eqiad.wmnet, elastic1035.eqiad.wmnet, elastic1045.eqiad.wmnet are marked down but pooled https://wikitech.wikimedia.org/wiki/PyBal</code>
+* 16:31 <code>ElasticSearch health check for shards on 9243 on search.svc.codfw.wmnet is CRITICAL.</code> At the same time, <code>production-search-codfw</code> has dropped into red cluster status
+* 17:09 <code>enwiki</code> searches begin to work again (presumably due to recovery of the associated <code>enwiki</code> shards). User-visible impact decreases.
+* 18:xx codfw enters green cluster status (full recovery)
+* 18:xx eqiad enters green cluster status (full recovery)
+* 18:30 MediaWiki api_appserver latency returns to normal levels
+* 18:34 PoolCounter stops rejecting requests, user-visible impact ends.
+[[File:2021-09-13 appserver latency due to cirrussearch outage.png|thumb|The api_appserver cluster saw higher latency during the outage.]]
+
+'''Impact''': For about 2 hours (from 16:29 until 18:34) search requests on en.wikipedia.org (and likely other wikis) failed with "''An error has occurred while searching: Search is currently too busy. Please try again later.''". Search suggestions (from API opensearch) were absent or delayed. During the incident, the api_appserver cluster saw higher average latency overall due to the proportion of search queries.
+
+'''Documentation''':
+* Impact to shards during incident: https://grafana.wikimedia.org/d/000000455/elasticsearch-percentiles?viewPanel=64&orgId=1&from=1631549942000&to=1631558700000&var-cirrus_group=codfw&var-cluster=elasticsearch&var-exported_cluster=production-search&var-smoothing=1
+*Impact on API opensearch queries: https://grafana.wikimedia.org/d/000000559/api-requests-breakdown?orgId=1&var-metric=&var-module=opensearch&from=1631521577658&to=1631588860150
+* Impact on per-host CPU load averages during incident: https://grafana.wikimedia.org/d/000000455/elasticsearch-percentiles?viewPanel=63&orgId=1&from=1631549942000&to=1631558700000&var-cirrus_group=codfw&var-cluster=elasticsearch&var-exported_cluster=production-search&var-smoothing=1
+* Impact to PoolCounter rejections (proxy for user impact): https://grafana.wikimedia.org/d/qrOStmdGk/elasticsearch-pool-counters?orgId=1&from=1631549942000&to=1631558700000
+* [https://wm-bot.wmcloud.org/logs/%23wikimedia-operations/20210913.txt #wikimedia-operations log]
+
+== Actionables ==
+* {{phab|T290902}} Iron out procedure to roll out cirrus/elasticsearch changes involving [implicitly via puppet or explicitly] service restarts
+<!-- * <mark>To do #2 (TODO: Better understand under what conditions cirrussearch will issue the "Search is currently too busy" error...in this incident, even when in yellow cluster status, searches still failed)</mark> -->
+
+<!--TODO: Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] Phabricator tag to these tasks.-->

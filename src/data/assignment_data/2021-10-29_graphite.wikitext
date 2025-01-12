@@ -1,0 +1,160 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary and Metadata ==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+| '''Incident ID'''
+|2021-10-29 graphite
+|'''UTC Start Timestamp:'''
+| 2021-10-21 10:24:00
+|-
+|'''Incident Task'''
+| [https://phabricator.wikimedia.org/T294355 T294355]
+|'''UTC End Timestamp''' 
+| (no end- data lost forever. Mitigated on: 2021-12-13, 09:12:00)
+|-
+|'''People Paged'''
+| 0
+|'''Responder Count''' 
+| 3: Lucas_Werkmeister_WMDE, fgiunchedi, Jcrespo
+|-
+|'''Coordinator(s)'''
+| fgiunchedi
+|'''Relevant Metrics / SLO(s) affected'''
+| Data loss - No SLO defined
+|-
+|'''Summary:'''
+| colspan="3" |The backfill process for Graphite metrics silently failed during the Bullseye migration. A subset of metrics experienced loss for data points before October 11th 2021
+|}'''Impact''': The backfill process for Graphite metrics silently failed during the Bullseye migration. A subset of metrics experienced loss for data points before October 11th 2021
+
+The process of reimaging a Graphite host is as follows:
+
+# reimage host
+# let metrics flow for a few days to validate the host is working
+# backfill the rest of the data (online, no downtime) from the other Graphite host following https://wikitech.wikimedia.org/wiki/Graphite#Merge_and_sync_metrics
+
+During the Bullseye migration the backfill process failed (undetected) for a subset of metrics, leading to metric data loss once the Bullseye migration was complete (i.e. graphite2003 first and then graphite1004 were reimaged and put back in service)
+
+{{TOC|align=right}}
+
+== Timeline ==
+
+'''All times in UTC.'''
+
+* Oct 11 11:45 reimage of graphite2003 https://phabricator.wikimedia.org/T247963#7416306
+* Oct 18 11:30 backfill of graphite 2003 https://phabricator.wikimedia.org/T247963#7435382
+* Oct 19 failover from graphite1004 to graphite2003
+* Oct 21 10:24 reimage of graphite1004 and data backfill from graphite2003 https://phabricator.wikimedia.org/T247963#7447084
+* Oct 25 failover from graphite2003 to graphite1004 https://phabricator.wikimedia.org/T247963#7455052
+* Oct 26 16:50 report of missing metric data in https://phabricator.wikimedia.org/T294355
+
+== Detection ==
+
+Some Grafana dashboards backed by Graphite showed partial data (starting Oct 11 or Oct 21) for a subset of metrics, as reported by  Lucas Werkmeister in https://phabricator.wikimedia.org/T294355
+
+== Conclusions ==
+
+The <tt>whisper-sync</tt> backfill process is not as reliable as previously thought, no visible errors were logged and/or detected.
+
+=== What went well? ===
+* Only a subset of metric files experienced data loss
+
+=== What went poorly? ===
+* The data loss was not detected by automated means or during spot-check validation
+* The data loss was only detected after both hosts had been reimaged, at which point lost data could no longer be recovered
+
+=== Where did we get lucky? ===
+* Only a subset of metric files experienced data loss
+
+=== How many people were involved in the remediation? ===
+* 1 SRE (Filippo Giunchedi)
+
+== Links to relevant documentation ==
+* https://wikitech.wikimedia.org/wiki/Graphite#Merge_and_sync_metrics
+
+== Actionables ==
+
+* Understand the feasibility (and need) to back up a small subset of important metrics https://phabricator.wikimedia.org/T294355#7464552
+* Revise the backfill procedure to be more robust in the face of similar failures in the future (e.g. run a full rsync first, then backfill only the gap) https://phabricator.wikimedia.org/T296295
+* Perform validation post-sync / post-backfill to check the number of datapoints across all metric files is roughly in sync between hosts https://phabricator.wikimedia.org/T296295
+*Continue (and speed up) the Graphite retirement plan https://phabricator.wikimedia.org/T228380
+
+=Scorecard=
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|1
+|
+|-
+! rowspan="5" |Process 
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling 
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|9
+|
+|}

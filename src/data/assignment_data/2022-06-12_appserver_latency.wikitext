@@ -1,0 +1,92 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task =T310431 
+| paged-num = 
+| responders-num = 
+| coordinators = 
+| start =2022-06-12 08:14 UTC 
+| end =2022-06-12 08:44 UTC 
+|impact=For about 30 minutes, backends were intermittently slow or partially unresponsive. This affected a portion of logged-in clients and uncached page views.}}
+'''Documentation''':
+*https://www.wikimediastatus.net/incidents/nb6v1zxp86ns
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|
+|
+|-
+|Was the public status page updated?
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

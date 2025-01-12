@@ -1,0 +1,98 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = T308940
+| paged-num = 5
+| responders-num = 7
+| coordinators = dzahn
+| start = 2022-05-21 19:01:00
+| end = 2022-05-21 19:03:00
+| impact = For 2 minutes, all wikis and services served by our CDN were unavailable to all users.
+}}
+
+A flood of API traffic from an AWS instance caused caching servers to be overloaded. Services behind our caching layer were up, but not reachable during this time.
+
+==Actionables==
+*[[phab:T308952|T308952 - get a legend for haproxy "anomalous session termination states"]]
+*[[phab:T308940|T308940 - follow-up on user reported ticket with  public incident report]]
+*[[phab:T308941|T308941 - semi related: Klaxon redirects to http]]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|
+|
+|-
+|Was the public status page updated?
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were all engineering tools required available and in service?
+|
+|
+|-
+|Was there a runbook for all known issues present?
+|
+|
+|-
+! colspan="2" align="right" |Total score ('''count of all “yes” answers above)'''
+|
+|
+|}

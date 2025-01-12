@@ -1,0 +1,34 @@
+{{irdoc|status=review}}
+
+== Summary ==
+On Dec 2nd 2020 we Analytics team migrated Hive's netflow data set from the `wmf` database to the `event` database; and accordingly, it's HDFS data was moved from `/wmf/data/wmf/netflow` to `/wmf/data/event/netflow`. This migration was part of [https://phabricator.wikimedia.org/T231339 T231339], you can check the migration plan [https://phabricator.wikimedia.org/T231339#6652012 here]. The migration went well, but a detail was missing in the migration plan: Hive's `event` database, as well as the corresponding HDFS directory `/wmf/data/event`, have a purging job set up to delete all data older than 90 days within that database/directory. Deletion is necessary to abide to [https://meta.wikimedia.org/wiki/Data_retention_guidelines WMF's data retention guidelines]. That job runs periodically on a daily basis, at midnight UTC. If you want to prevent the purging job to delete a given data set within its premises, you have to white-list it in the [https://github.com/wikimedia/puppet/blob/production/modules/profile/manifests/analytics/refinery/job/data_purge.pp#L334 job's config] (via a regex). We did not do that, and as a result, at the end of the day (00:00 UTC) the purging job deleted all netflow data except for the last 90 days.
+
+== Repercussions ==
+* Netflow data in Hive spanned from ~2018 to currently. So about 3 years of data were deleted (we're not sure when exactly the data started).
+* However, after discussing with netflow team stakeholders, they mentioned that data prior to Aug 2019 was not valuable. So, 1 year and 4 months of valuable data were deleted.
+* Now, a copy of netflow data since Aug 2019 does still exist in Analytics' Druid cluster and is intact. Netflow stakeholders mentioned that Druid is the main storage they use for analysis and follow-up of that data set.
+* Still, Druid's copy of the data does not contain some fields that should have been in Hive. Those are `ip_proto` and `region`. The latter was introduced recently (was not in Hive's deleted data), but we could have back-filled it if we wouldn't have lost the data.
+* Luckily, seems very few data was completely lost in the end.
+
+== Timeline ==
+* 2020-12-02T18:00:00 UTC  DEV and SRE perform netflow's Hive migration.
+* 2020-12-03T00:00:00 UTC  Purging job silently deletes all netflow Hive data older than 90 days.
+* 2020-12-03T18:00:00 UTC  DEV notices missing data while working on related task, and notifies part of the Analytics team.
+* 2020-12-03T18:30:00 UTC  DEVs and SRE implement a quick fix to prevent further deletion by purging script.
+* 2020-12-03T19:00:00 UTC  Part of the Analytics team discusses repercussions, possible mitigation actions, and next steps.
+* 2020-12-03T20:00:00 UTC  DEV sends an email to the whole Analytics team, explaining the incident with detail.
+* 2020-12-04T10:00:00 UTC  DEV notifies netflow team stakeholders of the incident, and they evaluate repercussions.
+* 2020-12-17T17:30:00 UTC  The Analytics team has a post-mortem meeting to discuss actionables and learnings.
+
+== Post-mortem ==
+* We discussed and agreed that, except for the obvious detail, the migration was well planned and the process was appropriate: the migration plan was reviewed by 2 people, and we paired when applying it.
+* We identified that the way the deletion script is set up is prone to data deletion incidents. Initially, the script was only for EventLogging data, but then we added other data sets to the same directory, and patched the deletion script to select the data sets to delete via a regex. We believe that a more robust way of specifying which data set needs deletion (where, when, how, etc...) is needed (data governance).
+* We agreed as well that the team's reaction when discovering the issue was appropriate: We timely informed people in the team, and stakeholders. We evaluated data loss, possible mitigations, and repercussions. We put together a transparent incident documentation, and we followed up with a post-mortem for lessons learned.
+* We also discussed several actions that could mitigate the risk of this kind of unwanted data deletion to happen in the future, and also improve our current pipeline.
+
+== Actionables ==
+* Proposed mitigation: Remove --skipTrash flag from some of the data deletion scripts. Namely, the ones that delete data in a generic way for a dynamic number of data sets (like the one in this incident). If we do so, the deleted data will still live in the .Trash folder for 30 days. Usually deleted data is privacy-sensitive, so keeping it for an extra 30 days could be a problem. However, we can consider the .Trash folder as a temporary safety backup, and backups are treated differently by WMF's [https://meta.wikimedia.org/wiki/Data_retention_guidelines data retention guidelines]; they are allowed to be kept for longer than 90 days. One caveat to take into consideration is that even just 30 days of extra data can become a considerable amount of data to keep and this might in some cases put pressure on the cluster's capacity. https://phabricator.wikimedia.org/T270431
+* Proposed mitigation: The deletion scripts should have a safeguard that prevents them to delete the data if its size is unexpected. You can run a deletion script telling it with a flag, how much data you expect it to delete (D). If the data to be deleted is more than D, then the script will no-op, warn and exit with non-0 code. With this feature, we could make sure that no unexpected extra data gets deleted. At some point we might receive alerts when the data size naturally grows, but that's acceptable in exchange of the extra protection. https://phabricator.wikimedia.org/T270433
+=== More long-term solutions ===
+* Refactor the sanitization process and re-organize the data into a better database structure. We should use explicit names like: temporary_events or unsanitized_events.
+* Having a data governance solution would help us specifying which data sets are to be deleted and when (and even maybe how!). Let's keep in mind that deletion should be the default for new data sets, otherwise we'd lose control of what data we keep.

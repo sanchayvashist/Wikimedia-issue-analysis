@@ -1,0 +1,7 @@
+{{irdoc|status=final}}
+== Summary ==
+https://phabricator.wikimedia.org/T257062 Lilypond seemingly bypassing security restrictions.
+
+== Actionables ==
+* Audit all mismatched/unrecognised wmf-config settings. – https://phabricator.wikimedia.org/T257079
+* Lint against unrecognised wmf-config settings in CI. – https://phabricator.wikimedia.org/T248866

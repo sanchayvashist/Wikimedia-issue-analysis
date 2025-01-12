@@ -1,0 +1,146 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| id = eqiad/LVS
+| task = T337497
+| paged-num = 2
+| responders-num = 7
+| coordinators = Janis
+| start = 2023-05-25 14:04
+| end = 2023-05-25 14:25
+| metrics = edits per second, rps in general, 5xx responses from CDN, appserver latency
+| impact = For approximately 15-20 minutes logged in users connecting to to Wikimedia wikis through our Ashburn datacenter and editors in general may have received 503 errors
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->During scap deploys one of the LVS servers in eqiad was taken down which resulted in multiple servers being depooled making eqiad unable so serve traffic.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*Scap runs at 13:52, 14:08, 14:10
+*14:04 PyBal disabled on lvs1019 as part of maintenance but a deploy was ongoing '''OUTAGE BEGINS'''
+*14:05 PROBLEM - PyBal backends health check on lvs1019 is CRITICAL: PYBAL CRITICAL - Bad Response from pybal: 500 Cant connect to localhost:9090 (Connection refused) <nowiki>https://wikitech.wikimedia.org/wiki/PyBal</nowiki>
+*14:08 <icinga-wm> PROBLEM - PyBal backends health check on lvs1020 is CRITICAL: PYBAL CRITICAL - CRITICAL - appservers-https_443: Servers mw1418.eqiad.wmnet, mw1417.eqiad.wmnet, mw1416.eqiad.wmnet, mw1415.eqiad.wmnet, mw1414.eqiad.wmnet are marked down but pooled: parsoid-php_443: Servers parse1017.eqiad.wmnet, parse1011.eqiad.wmnet are marked down but pooled: api-https_443: Servers mw1447.eqiad.wmnet, mw1448.eqiad.wmnet, mw1449.eqiad.wmnet, mw1450.eqiad.wmnet  marked down but pooled <nowiki>https://wikitech.wikimedia.org/wiki/PyBal</nowiki>
+*14:09: PyBal re-started on lvs1019
+*14:14 bblack started repooling parsoid in
+*14:17  Incident opened.  '''Janis''' becomes IC.
+*14:21 appservers and api_appservers repooled
+*14:22 jobrunners and videoscalers repooled
+*14:25 recoveries coming in '''OUTAGE ENDS'''
+*14:42 still elevated latencies on api_appservers, might be unrelated as there is a spike of read traffic on s7
+*14:58 s7 query throughput is high due to db maintenance, most likely unrelated
+*14:58 api_appserver latency trending down
+*15:08] <jinxer-wm> (MediaWikiLatencyExceeded) resolved: Average latency high: ...
+<!-- Reminder: No private information on this page! -->
+
+==Detection==
+The issue was detected immediately by SRE doing maintenance work. Multiple alerts as well as pages immediately followed.
+
+==Conclusions ==
+
+===What went well?===
+
+* Automated alerting detected the issue quickly
+
+===What went poorly?===
+
+*We did not manage to avoid this happening again although we already knew about LVS downtime during scap deploys being an issue
+
+===Where did we get lucky?===
+
+* Remediation of the outage was quick due to its root cause already being known, see [[Incidents/2023-04-17 eqiad/LVS]]
+
+==Links to relevant documentation==
+
+* [[Incidents/2023-04-17 eqiad/LVS]]
+* https://phabricator.wikimedia.org/T334703
+* https://phabricator.wikimedia.org/T337497
+
+==Actionables==
+
+* https://phabricator.wikimedia.org/T334703
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|{{PhabT|337497}}
+|-
+|Are the documented action items assigned?
+|yes
+|{{PhabT|334703}}
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|Same issue as [[Incidents/2023-04-17 eqiad/LVS]]
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|{{PhabT|334703}}
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

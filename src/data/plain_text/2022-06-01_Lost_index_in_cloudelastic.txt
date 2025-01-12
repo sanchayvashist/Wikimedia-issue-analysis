@@ -1,0 +1,46 @@
+
+
+==Summary==
+
+
+During a reimage operation, the cloudelastic Elasticsearch cluster lost a shard and went into red status, indicating data loss.
+
+Until the data was restored, search results were incomplete on Cloudelastic. Restoration from production snapshots, using the previously understood and documented process, failed consistently, requiring a different approach to be devised which is why restoration was delayed by a month. Restoration was completed on 12 July. 
+
+Documentation:
+*https://phabricator.wikimedia.org/T309648#8072778
+
+==Actionables==
+
+*Restore data to cloudelastic
+*Document cloudelastic cluster (what is its purpose, who are the stakeholders, etc)
+*Document restore process
+*Review monitoring for cloudelastic
+*Inform stakeholders of the current situation
+
+TODO: Add the #Sustainability (Incident Followup) and the #SRE-OnFIRE (Pending Review & Scorecard) Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              		
+People                                        	Were the people who responded prepared enough to respond effectively                                              		
+People                                        	Were fewer than five people paged?                                                                                		
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     		
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.		
+Process                                       	Was the incident status section actively updated during the incident?                                             		
+Process                                       	Was the public status page updated?                                                                               		
+Process                                       	Is there a phabricator task for the incident?                                                                     		
+Process                                       	Are the documented action items assigned?                                                                         		
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               		
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.		
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         		
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            		
+Tooling                                       	Were all engineering tools required available and in service?                                                     		
+Tooling                                       	Was there a runbook for all known issues present?                                                                 		
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    		

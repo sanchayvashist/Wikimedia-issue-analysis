@@ -1,0 +1,212 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID'''
+|2021-11-05 TOC language converter
+|'''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+| https://phabricator.wikimedia.org/T299966
+|'''UTC End Timestamp''' 
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged'''
+|<amount of people> 
+|'''Responder Count'''
+|<amount of people>
+|-
+| '''Coordinator(s)'''
+| Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget
+|-
+| '''Impact:'''
+| colspan="3" |For 6 hours, wikis experienced a blank or missing table of contents on many pages. For up to 3 days prior, wikis that have multiple language variants (such as Chinese Wikipedia) displayed the table of contents in an incorrect or inconsistent language variant (which are not understandable to some readers).
+|}On wikis with language variants enabled (ban/crh/gan/iu/kk/ku/shi/sr/tg/uz/zh, but noticed and [[phab:T295187|reported on Chinese Wikipedia]]), the Table of Contents was not being converted to the selected language variant.  Train rollback made the problem worse on '''all''' wikis: any page put into the parser cache by the new release had '''no table of contents at all''' when the train was rolled back (at least until the page was manually purged), since the rollback version of MediaWiki didn't know how to handle the Table of Contents marker in the ParserCache contents left by the newer version.
+
+The train was rolled forward again, as the "lesser of two evils".  A fix to properly convert Table of Contents into the selected language variant was rolled out late Friday evening PST to mitigate the worst impacts.
+
+Initially, affected wikis had Tables of Contents displayed in an incorrect or inconsistent language variant on all pages. (Depending on the language, this may or not render it unreadable to a subset of visitors.)  On rollback, the Table of Contents was entirely lost on pages rendered since the initial train deploy on all wikis. Train was rolled forward again to restore the original impact, then a patch was deployed to correct variant rendering in the table of contents on all but a small subset of pages on those wikis.
+
+== Timeline ==
+===September 15===
+* Work begins on table of contents patch [[gerrit:721115]] (initial author: [[user:Jdlrobson]], with [[user:cscott]] reviewing, but quickly becomes a joint effort)
+
+===October 27===
+* Patch merged ahead of a project status update scheduled for the morning of Oct 28.
+
+===November 2===
+* [https://sal.toolforge.org/log/zW094nwBa_6PSCT941O3 20:01 UTC]: Patch begins roll out, first only to test wikis due to US holiday. No reason at this point to believe it's risky.
+
+===November 3===
+* [https://sal.toolforge.org/log/mc8653wB8Fs0LHO5KfvQ 19:15 UTC]: Train rolls out to group 0, delayed due to US holiday.
+* [https://sal.toolforge.org/log/OXFb53wB1jz_IcWugPdH 19:51 UTC]: Thirty minutes after group 0, train rolls out to group 1, which includes Wikivoyage as well as non-Wikipedia Chinese projects.  Both ToC issues (T295003 and T295187) would have begun to appear on group 1 wikis.
+===November 4===
+* 06:56 UTC: [[phab:T295003]] is reported on Wikivoyage, an incompatibility with the [[mw:Extension:WikidataPageBanner]] extension which causes tables of contents to appear on Wikivoyage pages (they are usually suppressed on mainspace pages by the extension, and a custom pagebanner inserted).  A temporary workaround using site CSS/JS is developed, and this bug does not block the train.
+* [https://sal.toolforge.org/log/PnZt7HwB1jz_IcWuLNFn 19:29 UTC]: Train rolls out to group 2, which includes Chinese Wikipedia (zhwiki).  Chinese Wikipedia begins to be affected by [[phab:T295187|T295187]].
+===November 5===
+* 16:17 UTC: [[gerrit:737075]] is written and merged (16:57 UTC) to fix the issues with Wikivoyage; however, it is not immediately backported as a temporary fix is already in place.
+* 17:56 UTC: [[phab:T295187]] is reported: "Since yesterday" language conversion has failed to be applied to the table of contents "on Chinese Wikipedia".
+* 18:18 UTC: Subbu flags issue to cscott and jdlrobson, who begin analyzing the issue.
+* 19:41 UTC: Phab task T295187 is set to Unbreak Now.
+*19:42 UTC: legoktm points out the issue being UBN to dduvall as that week's train conductor. Discussion on whether it's rollback worthy happens in #wikimedia-releng 
+* 20:08 UTC: [[User:dduvall]] sets T295187 to be an train blocker ([[phab:T293948]]).
+* [https://sal.toolforge.org/log/hdq_8XwB8Fs0LHO5nTZ7 20:17 UTC]: Train rolled back to 1.38.0-wmf.6 on group 0/1/2 wikis.  Missing Tables of Contents begin to appear on all wikis: <mark>[[phab:????]]</mark>.  Brief client  error spike relating to the previously documented error [[phab:T295079|https://phabricator.wikimedia.org/T295079]].
+* 21:23 UTC: Subbu alerts jdlrobson and cscott on Slack the train was rolled back. Neither has seen this.
+* 22:20 UTC: jdlrobson reports issue with parser cache not being compatible between versions, the result is table of contents is now no longer present on cached pages.
+* 22:28 UTC: cscott comments on a patch he's working on to provide a solution.
+* [https://sal.toolforge.org/log/v30v8nwBa_6PSCT9Zb6t 22:19 UTC]-[https://sal.toolforge.org/log/T3078nwBa_6PSCT9T81w 22:32 UTC]: The train is rolled forward to 1.38.0-wmf.7 on all wikis again.
+===November 6===
+* 00:10 UTC: [[User:cscott]]'s first "quick-and-dirty" patch [[gerrit:737150]] is uploaded; it is a bit safer but would not fix pages which already have "non-language-converted" renders in the ParserCache (which would initially be all pages in the ParserCache)
+* 00:27 UTC: [[User:cscott]]'s follow-up patch [[gerrit:737079]] is uploaded; by doing the language conversion in <code>ParserOutput::getText</code> it would ensure that cached pages are converted properly.
+* 01:08 UTC: [[user:cscott]]'s patch [[gerrit:737079]] is backported to fix T295187.
+* [https://sal.toolforge.org/log/NX7q8nwBa_6PSCT9c2B1 01:43 UTC]: [[user:cscott]]'s patch is deployed resolving [[phab:T295187|T295187]].
+===November 8===
+* 19:39 UTC: The fix for Wikivoyage is backported and [https://sal.toolforge.org/log/2JIQAX0Ba_6PSCT9GKGK deployed].  Admins remove their workarounds and confirm the fix.
+
+=== Epilogue ===
+The table of contents was incorrectly presenting the author's original variant (instead of converting to consistent simplified or traditional characters) on Chinese Wikivoyage and other non-Wikipedia projects from Nov 3 19:51 UTC to Nov 6 01:43 UTC.  Other non-Wikipedia projects in ban/crh/gan/iu/kk/ku/shi/sr/tg/uz/zh languages were also affected during the same time frame.
+
+Chinese Wikipedia and Wikipedia projects in ban/crh/gan/iu/kk/ku/shi/sr/tg/uz/zh languages were incorrectly rendered from Nov 4 19:29 UTC to Nov 6 01:43 UTC.
+
+In certain of these languages, readers are not typically literate in more than one script; for these readers the Table of Contents would have been unintelligible for that time period.  In other language regions, like Serbian, most readers are literate in both dominant scripts for the language and the issue would have been mostly cosmetic.
+
+From 5 Nov 20:17 UTC (when the train was rolled back to wmf.6) to 22:32 UTC (when we restored wmf.7), the table of contents disappeared '''in all wiki projects''', with the exception of pages that remained in the ParserCache and were not edited or otherwise purged in the two after since Nov 3. Specifically, pages not edited between Nov 3 19:15 (group 0-1 wikis) or Nov 4 19:29 (group 2 wikis) and Nov 5 20:17.<!-- Reminder: No private information on this page! -->
+
+== Detection ==
+The issue was first detected by users of Chinese Wikipedia.  There was no automated monitoring.
+
+On investigation, there '''do not appear to be any parser tests or other test cases which exercise language conversion on the table of contents''' ([[phab:T295187]]) or which verify the correct operation of the WikidataPageBanner extension ([[phab:T295003]]).
+
+Rollback removed the table of contents from many articles on all wikis; this was also not detected by any monitoring.
+
+Rollback ''did'' cause <u>spurious</u> (unrelated to the table of contents issue) alerts, as discussed above: [[phab:T295079]].
+== Conclusions ==
+
+This incident exposed weaknesses in test coverage of the Table of Contents, and in the way that Parser Cache content interacts with our deployment and versioning systems.  Content stored in RESTBase has the potential for similar issues, as discussed below, but has slightly better purging and versioning systems to allow prevention and/or mitigation of version mismatch issues such as these.
+
+In addition, procedural weaknesses were exposed in flagging potentially "risky" patches, and in the forum used for rollback discussions.  A related issue is that, due to time zone skew, detecting and reacting to failures in Chinese Wikipedia (deployed late UTC time on Thursday) can easily push timelines past 5pm local time on a Friday for engineers involved in the response.  The community involved in the smaller group 1 projects, like Chinese Wikivoyage, would in theory have noticed both ToC problems a full day earlier, but those community members did not successfully relay the issue to WMF staff.  It may be advisable to move Chinese Wikipedia from group 2 to group 1 in order to accelerate detection and response to issues.
+
+=== What went well? ===
+* We went into the weekend in a more or less stable state thanks to many engineers going above and beyond and staying late on a Friday/
+* There were test cases for parser cache output for the *roll forward* case, so we weren't stuck in a "can't go forward, can't go backward" case.
+* Some good lessons learned are likely to come out of this :-)
+
+=== What went poorly? ===
+*The patch was not correctly identified as risky due to complexities in the parser code so this was not flagged on Monday as a risky patch to train conductors. Changes to the parser should likely always be flagged as risky even if we don't know how, and as part of the code review process we should have considered rollback plans. The ParserOutput does not have any concept of versioning and the ParserOutput::getText method is not documented in such a way that makes it clear such changes are risky.
+*This exposed issues in communication protocols. Key individuals analyzing the problem were conversing on Slack (product engineers are required to be there), while train conductors were conversing on IRC (release engineering are required to be there). Other individuals were offline due to [https://office.wikimedia.org/wiki/HR_Corner/Culture/Silent_Fridays Silent Fridays] <ref>This is a link to a private wiki. In summary, it describes how employees are encouraged to use Friday as focus time and feel free to limit communication mediums, in order to reduce problems occurring before the weekend, and avoid meetings during Friday evenings in many timezones.</ref>. The decision to roll back the train on a Friday which led to the disappearance of table of contents, which had been identified but not documented at the time. Ideally, we should always reach out to those closest to the problem at hand before making such decisions, even if that delays fixing the bug, but the communication protocols failed us here.
+*The LanguageConverter's use of table of contents was not documented in a test so was not obvious when the patch was being written. This issue could have been caught with a well written unit test.
+* This issue was not timely flagged by any of the other users of LanguageConverter other than zhwiki.  It should have been visible a day earlier on non-Wikipedia projects, and simultaneously visible on other large-ish language-converter wikis like srwiki.  This seems to imply poor visibility and communication between WMF and these communities.
+
+=== Where did we get lucky? ===
+* Lots of user reports from Chinese language speakers made it clear this was a problem.
+* Despite being late on a Friday we managed to (eventually) get the right people together to provide a fix for the weekend. We were lucky that certain individuals went above and beyond to work late on Friday to make sure the problem was dealt with.
+* The versioning issue with Parser Cache contents is also relevant to the editing team: previously Discussion Tools maintained a split ParserCache with a unique key for content inserted by DiscussionTools.  This provided a basic form of versioning: by varying the key in a release they could ensure that "new" and "old" parser cache contents would not be intermingled.  Recently they undid the split and unified the ParserCache (driven by SRE needs), which means they have a similar rollback/rollforward risk when they make changes to the DiscussionTools output.  Discussion between #editing and #content-transform teams foregrounded this risk, which hadn't been previously explicitly thought through.
+* RESTBase also has a similar rollback/rollforward issue with cached content.  The #content-transform team had a collective vague recollection that RESTBase had a superior versioning and content-purge mechanism to mitigate the issue if it occurred, but on discussion during a retrospective of this incident it was determined that this mechanism relied on [[user:ppchelko]] writing "like 5 lines of code" in a hot-patch to RESTBase.  Again, if a similar issue had occurred on RESTBase content we would have been relying on [[user:ppchelko]] or another member of PET coming up with this hot patch late on a Friday night.
+
+=== How many people were involved in the remediation? ===
+* [[user:jdlrobson]] and [[user:cscott]] troubleshooting the issue; [[user:dduvall]] driving the train, and [[user:legoktm]] as SRE for rollout of the patch to fix the issue.
+
+== Links to relevant documentation ==
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+=Scorecard=
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes 
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|No page
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+| Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no) 
+|1
+|Yes
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no) 
+|0
+|The issue was considered UBN and was noticed by the community. public status page was not updated, status updates were provided via tasks, train blocker, etc
+|-
+| Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|Tasks that have been created are not assigned, some actions are awaiting tasks
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|0
+|Communication issues documented in action items
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|Issue was detected manually
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no) 
+|1
+|Yes
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+! colspan="2" align="right" |Total score
+|6
+|
+|}
+== Actionables ==
+Technical changes:
+
+* Add test cases which exercise language conversion on the table of contents [[phab:T299973|T299973]]
+* Add test cases for WikidataPageBanner extension, esp for the table-of-contents replacement code (selenium tests?) [[phab:T299974|T299974]]
+* Create and document on wiki a test and deploy plan for changes to Parser Cache contents: (<mark>TODO: Phab ticket  [[phab:project/view/4758/|#Sustainability (Incident Followup)]] )</mark>
+** Patch which adds "future compatibility" (to handle "future" parser cache contents) should land first and roll out with the train, *before* any changes to parser cache contents are made.  This should have test cases verifying correct behavior during roll back (that is, correct behavior if "parser cache contents from the future" are encountered).  (These test cases were absent in this incident, since this split was not done.)
+** A subsequent patch which *changes* parser cache contents to the "future" form can roll out in a separate train; this will make it more likely that this train can be safely rolled back if issues are found.  This should have test cases verifying correct behavior during roll forward (that is, correct behavior if "parser cache contents from the past" are encountered).  (These test cases were present in this incident, which is a "what went well".)
+** Documentation for ParserOutput::getText() in particular should reference this plan to provide guidance around how best to make backwards compatible changes; it should note that such changes should be always be flagged as potentially risky to the SREs and have communicated a rollback plan.
+** Make this plan relevant to DiscussionTools and other users of parser cache contents as well.
+* Create and document on wiki a test and deploy plan for changes to RESTBase contents, including documenting [[user:ppchelko]]'s "five lines of code" to allow for purge during rollback.  (<mark>TODO: Phab ticket  [[phab:project/view/4758/|#Sustainability (Incident Followup)]] )</mark>
+* Allow earlier visibility for issues involving language variants by some means, such as by moving zhwiki or srwiki from group2 to group1.  (<mark>TODO: Phab ticket  [[phab:project/view/4758/|#Sustainability (Incident Followup)]])</mark>
+* Enable pig latin variant on English Wikipedia beta cluster ([[phab:T299975|T299975]]). This has two benefits:
+** It allows easier testing of variant-related issues in beta, for example to validate a patch on master before cherry-picking it to production.
+** It possibly also facilitates earlier visibility of issues involving language variants, although effectiveness requires someone to activity monitor the status of this wiki.
+
+Process changes  (<mark>TODO: Phab ticket (??) Add   [[phab:project/view/4758/|#Sustainability (Incident Followup)]] )</mark>
+
+* Revise communication protocols based on the current expectations of communication medium of WMF employees. For example, if product engineers are required to be available on IRC, that should be communicated broadly. If that's not a requirement, we should perhaps use email/Phabricator as primary communication

@@ -1,0 +1,14 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+From 07:31 to 08:16 UTC, there was increased latency and error rates for some MediaWiki cache misses and authenticated requests. The incident predominantly affected API users and bots on commons.wikimedia.org. API request latency for some requests went up by 5 seconds, and error rates upto 25%.
+
+The issue was found to be caused by a bot causing increased load on the commonswiki databases, and consuming API webserver resources. Later in the time range, regular users and other wikis were affected as well through cross-wiki features involving Commons.
+
+==Actionables==
+Tracking task:  https://phabricator.wikimedia.org/T280232

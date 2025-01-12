@@ -1,0 +1,7 @@
+{{irdoc|status=final}}
+== Summary ==
+Details restricted. See https://phabricator.wikimedia.org/T272215
+
+== Actionables ==
+
+* https://phabricator.wikimedia.org/T272262 - service restart script doesn't detect failure when running with poolcounter.

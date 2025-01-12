@@ -1,0 +1,20 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+An upload of [[phab:T278856|65 video 4k files]] via the [[Uploading_large_files|server-side upload process]] caused high CPU/socket timeout errors on jobrunners (all jobrunner hosts are also videoscalers).  This caused an increase in job backlog and unavailability on several mw-related servers (job queue runners, etc.).  It seems that a combination of the files being 4k (and thus requiring many different downscales), long (averaging an hour in length), combined with the fact that the videos were uploads from a local server (mwmaint) with a fast connection to the rest of our infrastructure resulted in too much load being placed on the jobqueue infrastructure.
+
+Halting the uploads and temporarily splitting the jobqueue into videoscalers and other jobrunners allowed the infrastructure to catch up.  
+
+== Actionables ==
+
+* <s>Document that users should use <code>--sleep</code> to pause between files when running <code>importImages.php</code> [https://wikitech.wikimedia.org/w/index.php?title=Uploading_large_files&type=revision&diff=1905816&oldid=1830856 (done)]</s>
+* [[phab:T278943 | Rate limit the process to upload large files ]]
+* [[phab:T278945 | Add rate limiting to the jobqueue videoscalers ]]
+* [[phab:T278946 | Add alerting for Memcached timeout errors ]]
+* <s>[[phab:T278948 | Update Runboook wikis for the application and LVS servers ]]</s>
+* [[phab:T279100|Have some dedicated jobrunners that aren't active videoscalers]]

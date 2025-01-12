@@ -1,0 +1,35 @@
+
+
+==Summary==
+
+
+This was due to an issue at the Amsterdam Internet Exchange (AMS-IX).
+
+Documentation:
+
+* https://www.wikimediastatus.net/incidents/jnqvz8gljzhy
+
+*Restricted document
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	1    	
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	0    	Paged via batphone
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	0    	Paged via batphone
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	0    	Paged via batphone
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	1    	
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	0    	
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	0    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	1    	
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	1    	
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	1    	
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	1    	
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	1    	
+Total score	Total score                                                                                                                                              	10   	

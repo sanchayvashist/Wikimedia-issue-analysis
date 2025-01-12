@@ -1,0 +1,154 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task =T313463 
+| paged-num =4 
+| responders-num =5 
+| coordinators =N/A 
+| start =2022-10-07 14:50:00 
+| end =2022-10-07 14:52:00 
+|impact=For 2 minutes eqiad row D suffered a partial connectivity outage (traffic coming through cr1-eqiad was blackholed).
+This had an impact on all types of clients. See for example https://grafana.wikimedia.org/d/-K8NgsUnz/home?orgId=1&from=1665067500000&to=1665069300000}}
+
+After the row C uplinks change (part of [[phab:T313463|T313463]]) was completed successfully, the same procedure got applied to row D's link to cr1-eqiad. While the asw side went fine (and took down the link as planned, waiting for the cr side to be reconfigured), the configuration change on the cr1 discarded traffic toward that switch. Traffic flowing from cr2 to row D was not impacted. Additionally the VRRP gateway was set to cr2, so outbound traffic from row D was not impacted as well.
+
+Troubleshooting was made more difficult as bast1003 is in row D causing management access to be lost. The change was done with an automatic rollback timeout of 2min. At that 2 min mark, the change got automatically reverted, restoring full connectivity before I was able to connect through a different bast host.
+
+The exact root cause of why the traffic was discarded is so far still unknown. Safe troubleshooting (eg. remove ae4 IP config, to test lower layer connectivity) will be done at a later date.
+
+The 2 dbproxies affected (for m3, m5) were passive, they were reloaded manually afterwards to point back into the usual primary hosts.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*14:50 configuration change pushed '''OUTAGE BEGINS'''
+*https://grafana.wikimedia.org/d/-K8NgsUnz/home?orgId=1&from=1665067500000&to=1665069300000&viewPanel=8
+*https://grafana.wikimedia.org/d/m1LYjVjnz/network-icmp-probes?from=1665067500000&to=1665069300000&viewPanel=2&orgId=1&var-site=All&var-target_site=eqiad&var-role=host&var-family=All
+*14:52 configuration change automatically rolled back '''OUTAGE ENDS'''
+[[File:2022-10-06-cdn-errors.png|thumb]]
+[[File:2022-10-06-icmp-latency-to-eqiad.png|thumb]]
+
+
+[[File:2022-10-06-appserver errors.png|thumb]]
+Most of the alerts triggered after the network stabilized, and the graphs show an impact multiple minutes after it as well. My guess is that workers queued up on the row D servers waiting on row A/B (and potentially E/F) servers (as their default gateway is on cr1) and took some time to catch up once connectivity was restored.
+==Detection==
+Ayounsi figured something was wrong when he lost connectivity to cr1-eqiad and bast1003.
+
+Multiple alerts triggered, some of the relevant ones:
+
+* 14:53 <jinxer-wm> (ProbeDown) firing: Service api-https:443 has failed probes (http_api-https_ip4) #page - [[Runbook#api-https:443|https://wikitech.wikimedia.org/wiki/Runbook#api-https:443]] - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki>
+* 14:53 <icinga-wm> PROBLEM - High average GET latency for mw requests on appserver in eqiad on alert1001 is CRITICAL: cluster=appserver code=200 handler=proxy:unix:/run/php/fpm-www-7.4.sock [[Monitoring/Missing notes link|https://wikitech.wikimedia.org/wiki/Monitoring/Missing_notes_link]] <nowiki>https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=9&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=appserver&var-method=GET</nowiki>
+* 14:54 <jinxer-wm> (PHPFPMTooBusy) firing: Not enough idle php7.4-fpm.service workers for Mediawiki api_appserver at eqiad #page - <nowiki>https://bit.ly/wmf-fpmsat</nowiki> - <nowiki>https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=54&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad%20prometheus/ops&var-cluster=api_appserver</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DPHPFPMTooBusy</nowiki>
+* 14:55 <icinga-wm> PROBLEM - haproxy failover on dbproxy1016 is CRITICAL: CRITICAL check_failover servers up 2 down 1: [[HAProxy|https://wikitech.wikimedia.org/wiki/HAProxy]]
+* 14:55 <icinga-wm> PROBLEM - haproxy failover on dbproxy1017 is CRITICAL: CRITICAL check_failover servers up 2 down 1: https://wikitech.wikimedia.org/wiki/HAProxy
+As it was during a maintenance the root cause was easy to identify.
+
+However, if this had happened on its own (even though unlikely), the root cause would have taken more time to identify. Especially as Icinga is running from row C, and thus not seeing the failure.
+
+==Conclusions==
+
+===What went well?===
+
+* Issue happened during a maintenance window
+* The automatic rollback Juniper feature did its job
+* Everything recovered on its own
+
+===What went poorly?===
+
+*Services recoveries took longer than expected
+*Root cause still unknown
+*Outage caused loss of mgmt connectivity to the router for quicker rollback or troubleshooting
+
+===Where did we get lucky?===
+
+*No master DB servers impacted
+
+==Links to relevant documentation==
+
+* See links under "Detection"
+
+==Actionables==
+
+*Root cause analysis: Cr1-eqiad comms problem when moving to 40G row D handoff - [[phab:T320566|T320566]]
+*To be discussed: how can we make the servers more resilient in face of such event?
+
+==Scorecard==
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

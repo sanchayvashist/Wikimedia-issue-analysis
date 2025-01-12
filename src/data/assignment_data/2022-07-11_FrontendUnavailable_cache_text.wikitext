@@ -1,0 +1,102 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 26
+| responders-num = 5
+| coordinators = Brandon Black, Arnold Okoth
+| start = 2022-07-11 19:30:00
+| end = 2022-07-11 19:36:00
+| metrics = No relevant SLOs exist
+| impact = For 5 minutes, the MediaWiki API cluster in eqiad responded with higher latencies or errors to clients.
+}}
+<!-- Reminder: No private information on this page! -->
+
+There was an increase in requests to the API cluster that resulted in reduction of availabe PHP workers and a database host (db1132) running out of available connections. This database host runs MariaDB 10.6 which is known to be sensitive to high load. This resulted in an increase in latency and errors returned to clients. The spike auto-recovered and it's not clear what the exact root cause was. 
+
+'''Documentation''':
+*[https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red?from=1657566000000&orgId=1&to=1657573200000&var-cluster=api_appserver&var-site=eqiad&var-method=GET&var-code=200&var-php_version=proxy:unix:%2Frun%2Fphp%2Ffpm-www.sock.* Appservers RED dashboard]
+
+==Actionables==
+
+*https://phabricator.wikimedia.org/T311106 - investigate mariadb 10.6 performance regression during spikes/high loads.
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|no
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

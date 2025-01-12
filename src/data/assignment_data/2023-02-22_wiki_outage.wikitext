@@ -1,0 +1,159 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = 2
+| responders-num = 2
+| coordinators = Filippo Giunchedi
+| start = 2023-02-22 9:18
+| end = 2023-02-22 9:45
+| impact = For approximately 18 minutes, around 17% of incoming, non-multimedia Wikimedia traffic received a 503, 500 error or were missing (most requests coming from eqiad and esams geolocated clients and using our cache layer: wikis, Phabricator, Grafana, ...)
+}}
+
+During a routine maintenance consisting of upgrading HAProxy on cache hosts, all of the backends (ATS) in the text cache cluster in esams and eqiad were accidentally depooled due to a mismatch on the maintenance run between depooling the hosts individually and pooling back the cdn. This caused both cached and uncached traffic requests for wikis and other ATS-backed services to fail and return errors to clients, mostly in parts of Europe, Africa and Asia. Approximately 17 million HTTP requests (according to varnish) / 5 million user requests (according to NEL estimation) errored out in total. Editing rate was reduced to less than half. Upload cluster, clients geolocated to drmrs, codfw, ulsfo or eqsin, and GET requests cached in memory were not affected.
+
+{{TOC|align=right}}
+
+==Timeline==
+08:57 vgutierrez@cumin1001:~$ sudo -i cumin -b1 -s60 'A:cp-text_esams' ''''depool''' && sleep 30 && DEBIAN_FRONTEND=noninteractive apt-get -q -y --assume-no -o DPkg::Options::="--force-confdef" install haproxy && run-puppet-agent -q && systemctl restart haproxy && sleep 5 && '''pool cdn'''<nowiki/>' ''# note the mismatch between depool and pool cdn''
+
+09:18 Esams fully depooled '''Outage starts here'''
+
+09:20 pages start rolling in
+
+09:24: <hashar> I am going to rollback to rule out the train
+
+09:25 Updated <nowiki>https://www.wikimediastatus.net/</nowiki>
+
+09:30  <vgutierrez> esams isn't able to reach appservers-ro or api-ro for some reason
+
+09:31 <hashar> (train rolled back)
+
+09:34 <logmsgbot> !log vgutierrez@puppetmaster1001 conftool action : set/pooled=yes; selector: dc=esams,service=ats-be,cluster=cache_text
+
+<logmsgbot> !log vgutierrez@puppetmaster1001 conftool action : set/pooled=yes; selector: dc=eqiad,service=ats-be,cluster=cache_text
+
+09:36 '''Outage stops here'''
+
+09:35  <vgutierrez> I basically depooled ats-be in eqiad and esams by accident
+
+09:45 Incident declared resolved
+
+09:48 Updated status page
+
+==Detection==
+Automated alerts / pages fired (FrontendUnavailable)
+
+* FrontendUnavailable cache_text ()
+* FrontendUnavailable (varnish-text)
+* [5x] ProbeDown (probes/service eqiad)
+
+==Conclusions ==
+
+===What went well?===
+
+* Automated alerts fired as expected
+* Oncall was engaged quickly, other folks joined the investigation too
+* A train deployment was suspected as the cause and quickly rolled back
+
+===What went poorly?===
+
+* Lots of things going on at the time of the outage
+* Alerting pages were not very descriptive on what was currently failing
+* logmsgbot seemingly didn't log to SAL the manual repools that happened at 9:34
+
+===Where did we get lucky?===
+
+* Lots of folks online to help debug
+
+==Links to relevant documentation==
+
+* [[Incident response]]
+
+==Actionables==
+
+* Update tunnelencabulator, some SREs had trouble accessing graphs during the outage
+** <nowiki>https://github.com/cdanis/tunnelencabulator/pull/6</nowiki>
+* [[phab:T330272|T330272]] Provide a cookbook to perform HAProxy upgrades on CDN nodes
+* [[phab:T330405|T330405]] Improve FrontendUnavailable alerts with more information/context of what's failing
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|
+|-
+|Is there a phabricator task for the incident?
+|no
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|13
+|
+|}

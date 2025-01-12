@@ -1,0 +1,79 @@
+
+
+== Summary ==
+
+
+</mark>
+
+
+
+==Timeline==
+All times in UTC.
+
+*2024-04-24 20:22 Search platform SREs merge this change and pool the new hosts, bringing elastic110[3-7] into the search cluster. Upstream error rate (as recorded from Envoy) begins to rise from < 0.1% to above 1%.
+*2024-04-25 03:13 Daily index update job for English Wikipedia fails at 44% due to connection problems from the maintenance host mwmaint1002 to the production eqiad Search cluster. Unfortunately, the incomplete index is promoted to production. Missing search results are reported by users in this Phab task.
+*2024-04-25 21:18 English Wikipedia index rebuild finishes successfully. Users now get a complete set of results, but error rate remains unacceptably high at ~1%.
+*2024-04-26 09:36  Dcausse (Search Platform SWE) points autocomplete Search traffic from the primary to secondary datacenter (codfw).
+*2024-04-26 13:31 At Dcausse's request, Akosiaris (SRE) depools the hosts that were pooled in step 1. Error rate drops back to normal, ending user impact. Ebernhardson, Dcausse and Bking (Search platform SWE/SRE) continue troubleshooting.
+
+*2024-04-26 16:34 Bking repools elastic1105 , which causes the error rate to shoot up again. Ebernhardon (Search Platform SWE) runs connectivity tests from mwmaint1002;  they show a ~5% failure rate.
+*2024-04-26 16:55 Cmooney (SRE, Network SME) joins troubleshooting call. With his help, we're able to isolate the connection problems down to 2 hosts: elastic1105 and 1107. He identifies missing VLAN sub-interfaces on LVS load-balancer hosts and pushes a puppet patch to correct this.
+*2024-04-26 17:19 Cmooney completes push of changes to lvs1019 and validates that the required connectivity is now in place and working so elastic1105 and elastic1107 are reachable from it at L2.
+*2024-04-26 17:28 Bking repools elastic1103-1107 and confirms that no new errors have been logged. Ebernhardson and Bking decide to wait until Monday to repool Search autocomplete at the datacenter level.
+*2024-04-29 13:30 Switch autocomplete Search traffic back to eqiad
+
+==Detection==
+Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?
+
+Humans reported an error via this Phab task
+
+==== Diagnosis ====
+The problem turned out to be that two of the new hosts, elastic1105 and elastic1107, were in racks E5 and F5 in eqiad.  That ought not to be a problem, but there had been an omission when provisioning the new vlans in these racks when they went live in early April.  Specifically the new vlans assigned for the racks were not configured on our LVS load-balancers, which need to be on the same vlan as any backend server they have to send traffic to.  The omission meant any time the new elastic hosts were selected by the load-balancer it tried and failed to connect to them, resulting in the errors.  The fix was to add the configuration via puppet to create new vlan sub-interfaces on the LVS hosts so they had direct connectivity to new the racks/hosts.
+
+==Conclusions ==
+
+===What went well?===
+
+* Part of the problem (incomplete search results) was detected and mitigated quickly.
+
+===What went poorly?===
+
+* Detection took too long
+** Lack of monitoring
+** Bad healthcheck, or the architecture of Pybal cannot detect this type of connection failure.
+
+===Where did we get lucky?===
+
+*
+
+==Actionables==
+
+* Phab task for follow-up
+** Elasticsearch: Alert on Downstream Errors
+** Create alert for LVS if it is configured for unreachable back-end server IPs.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	no 	
+People                                        	Were fewer than five people paged?                                                                                	no 	No paging happened
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	No paging happened
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	No paging happened
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	no 	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	no 	Search SRE have never done it
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	no 	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

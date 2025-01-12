@@ -1,0 +1,100 @@
+{{irdoc|status=review}}
+
+==MediaWiki availability on all wikis for logged-in users / uncached content==
+{{Incident scorecard
+| task = T303499
+| paged-num = 21
+| responders-num = 10
+| coordinators = Riccardo
+| start = 2022-03-10 08:26:11
+| end = 2022-03-10 08:46:03
+| metrics = API Gateway SLO
+| impact = For 12 minutes, all wikis were unreachable for logged-in users and for anonymous users trying to edit or access uncached content. Two spikes: from 08:24 to 08:30 UTC, and from 08:39 to 08:45 UTC approximately.
+}}
+The root cause seems to have been db1099, a replica database in the [[s8]] section  (Wikidata), that was rebooted for maintenance shortly before the incident and it was slowly repooled into production while at the same time there was a file transfer over the network from the same host. The load caused by the repooling, although at a very small percentage of the traffic, in addition to the existing bandwidth used by the file transfer, the host became slow to respond to queries, but not enough to be considered down and depooled automatically by other systems. This caused a cascade effect on DBs on the same section (s8) which got overloaded, and, because practically every page render involve reads from s8, it had a secondary cascade effect on all wikis, causing the exhaustion of workers at the application layer. The user-facing side of the outage was seen as slow or unavailable access to uncached render pages or perform read-write actions.
+
+'''Documentation''':
+*[https://grafana.wikimedia.org/d/000000278/mysql-aggregated?orgId=1&var-site=eqiad&var-group=core&var-shard=All&var-role=All&from=1646899633067&to=1646902183543&viewPanel=1 Dashboard with the query throughput for all databases] showing the dip of query processed on all database sections.
+*[https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?from=1646899805330&orgId=1&to=1646901605330&var-cluster=appserver&var-datasource=eqiad+prometheus%2Fops&var-method=GET&var-code=200&viewPanel=41 RED dashboard for the application servers] (MediaWiki) showing that the problem was related to the S8 database section.
+*[https://grafana.wikimedia.org/d/slo-apigw/api-gateway-slo-draft?orgId=1&from=1646899854317&to=1646903102143 API Gateway SLO dashboard]
+
+==Actionables==
+*[[phab:T303499|Incident tracking task]]
+*[[phab:T303498|Investigate if stopping mysql with buffer_pool dump between 10.4 versions is safe]]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|1
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|0
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|
+|
+|-
+! colspan="2" align="right" |Total score
+|5
+|
+|}

@@ -1,0 +1,37 @@
+
+
+==MediaWiki availability on all wikis for logged-in users / uncached content==
+
+The root cause seems to have been db1099, a replica database in the s8 section  (Wikidata), that was rebooted for maintenance shortly before the incident and it was slowly repooled into production while at the same time there was a file transfer over the network from the same host. The load caused by the repooling, although at a very small percentage of the traffic, in addition to the existing bandwidth used by the file transfer, the host became slow to respond to queries, but not enough to be considered down and depooled automatically by other systems. This caused a cascade effect on DBs on the same section (s8) which got overloaded, and, because practically every page render involve reads from s8, it had a secondary cascade effect on all wikis, causing the exhaustion of workers at the application layer. The user-facing side of the outage was seen as slow or unavailable access to uncached render pages or perform read-write actions.
+
+Documentation:
+*Dashboard with the query throughput for all databases showing the dip of query processed on all database sections.
+*RED dashboard for the application servers (MediaWiki) showing that the problem was related to the S8 database section.
+*API Gateway SLO dashboard
+
+==Actionables==
+*Incident tracking task
+*Investigate if stopping mysql with buffer_pool dump between 10.4 versions is safe
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	     	
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	0    	
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	     	
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	1    	
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	1    	
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	0    	
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	0    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	0    	
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	0    	
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	0    	
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	     	
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	     	
+Total score	Total score                                                                                                                                              	5    	

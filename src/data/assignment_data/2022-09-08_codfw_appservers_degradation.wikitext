@@ -1,0 +1,182 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T317340
+| paged-num = 1
+| responders-num = 3
+| coordinators = claime
+| start = 2022-09-08 15:18:18
+| end = 2022-09-08 15:51:18
+| metrics = Response time and 5xx rate
+| impact = For 2 minutes, appserver and api_appserver and in Codfw were in a degraded state.
+For 16 minutes, parsoid in codfw was in a degraded state.
+}}
+
+An Nginx server restart (RC) triggered an <code>etcdmirror</code> outage that started affecting end-users during a subsequent MediaWiki deployment. The etcd outage led to php-fpm not being able to contact its configuration server and failing to restart for the deployment. The appservers got depooled because of the failure until pybal depool protection kicked in. When etcdmirror was restarted to resolve the restart issue, the configuration state with the depooled servers was synchronized, which triggered the depooling of 50% of codfw api-https, api_appserver, appserver, and parsoid servers.
+
+{{TOC|align=right}}
+
+==Timeline==
+[[File:20220908 1532-1538-appserver latency.png|thumb|appserver latency ([https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red?orgId=1&var-site=codfw&var-cluster=appserver&var-method=GET&var-code=200&var-php_version=All&from=1662651131187&to=1662651531187 Grafana])]]
+[[File:20220908_1532-1538-api_appserver-latency.png|thumb|api_appserver latency ([https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red?orgId=1&var-site=codfw&varcluster=api_appserver&var-method=GET&var-code=200&var-php_version=All&from=1662651131187&to=1662651531187 Grafana])]]''All times in UTC.''
+*15:11: <wikibugs> (Merged) jenkins-bot [mediawiki-config] - https://gerrit.wikimedia.org/r/830803 ([[phab:T317025|T317025]])
+*15:17:21: moritzm updates nginx-light on conf1009, the update triggers a daemon restart (port 4001 on the conf* hosts serves the etcd tlsproxy which is accessed by etcdmirror)
+*15:17:24: conf2005 systemd[1]: etcdmirror-conftool-eqiad-wmnet.service crashes
+*15:17: scap@deploy1002: Start sync-common
+**scap.poolcounter.client: "[WARNING] lvs2009:9090 reports pool api-https_443/mw2306.codfw.wmnet as <code>enabled/up/pooled</code>, should be <code>disabled/*/not pooled</code>.  [ERROR] Error depooling the servers: enabled/up/pooled. [ERROR] Error running command with poolcounter: Failed executing ServiceRunner.run, return code 127"
+*15:18:18: claime launches scap sync-file and notices errors
+*15:22:02: <icinga-wm> PROBLEM - etcdmirror-conftool-eqiad-wmnet service on conf2005 is CRITICAL: CRITICAL - Expecting active but unit etcdmirror-conftool-eqiad-wmnet is failed 
+*15:23:45: <jinxer-wm> (JobUnavailable) firing: Reduced availability for job etcdmirror in ops@codfw.
+*15:28: scap@deploy1002: End of sync-common (duration: 12m 48s).
+**WARNING: 58 hosts had failures restarting php-fpm, 58 hosts had failures restarting php-fpm, 18 hosts had failures restarting php-fpm).
+*15:28:36: jayme notices issues with conf2005/etcdmirror
+*15:33:29: akosiaris restarts etcdmirror
+*15:34:00~: '''Start of degradation for clients'''
+*15:38:16: <icinga-wm> PROBLEM - High average GET latency for mw requests on appserver in codfw: <code>cluster=appserver code=200 handler=proxy:unix:/run/php/fpm-www-7.2.sock</code> https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=9&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=codfw+prometheus/ops&var-cluster=appserver&var-method=GET
+*15:34:42: _joe_ notices https://config-master.wikimedia.org/pybal/codfw/api-https
+*15:35:36: _joe_ repools api-https
+*15:36:32: _joe_ repools api_appserver
+*15:36:42: _joe_ repools appserver
+*15:36:42~: '''End of degradation for clients'''
+*15:50:32: claime repools parsoid
+
+==Detection==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+claime reports errors during scap sync-file, jayme picks up on conf2005/etcdmirror being in a CRITICAL state
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+15:22:02   +icinga-wm | PROBLEM - etcdmirror-conftool-eqiad-wmnet service on conf2005 is CRITICAL: CRITICAL - Expecting active but unit etcdmirror-conftool-eqiad-wmnet is failed
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+Alert fired on IRC but no page went out.
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+==Conclusions==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* RC very quickly identified due to akosiaris, _joe_, moritzm and jayme being around and correlating very quickly
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* Scap continues deployment even in the face of rising failure rates once canaries are passed.
+* Scap doesn't check the status of etcdmirrors before deployment.
+* No documentation on what to do with scap deployment in the face of rising failure rates.
+* The etcdmirror alert didn't page.
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+*_joe_ thought to check the pybal config after the etcdmirror restart which allowed very rapid response to the depooling
+*pybal depooling protection kicked in
+*5 persons were online to assist and quickly correlated RCA
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+*…
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+*[[phab:T317402|Page on etcdmirror alert]]
+*[[phab:T317535|Add etcdmirror connection retry on etcd-tls-proxy unavailability]]
+*[[phab:T317537|Update Etcd/Main cluster#Replication with safe restart conditions and information]]
+*[[phab:T317403|Add etcdmirror status check to scap]]
+*[[phab:T317405|Add failure rate triggered rollback to scap]]
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|got lucky
+|-
+|Were fewer than five people paged?
+|no
+|no pages -- but we wanted one
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|no pages
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|not warranted
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|irc alert only
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|etcdmirror documentation is spooky
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|6
+|
+|}

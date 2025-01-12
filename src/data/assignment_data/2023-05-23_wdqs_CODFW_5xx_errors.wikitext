@@ -1,0 +1,163 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T337327
+| paged-num = 
+| responders-num = 5
+| coordinators = Brian King
+| start = 2023-05-23 10:48:00
+| end = 2023-05-23 19:24:00
+| metrics = WDQS SLO
+| impact = A subset of users accessing the WDQS service from our CODFW datacenter received errors and timeouts.
+}}
+
+An expensive query sent over and over again by an external user(s) caused errors and timeouts for users accessing the WDQS service from our CODFW datacenter. A requestctl rule was put in place to mitigate the issue.
+
+[[File:Wdqs outage 2023 05 23.jpg|thumb]]
+{{TOC|align=right}}
+
+==Timeline==
+
+
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC''
+
+*1047 first Icinga alerts fire. Example verbiage: - ''PyBal backends health check on lvs2010 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs2009.codfw.wmnet are marked down but pooled''
+*1536 Rolling restart of the WDQS service in CODFW temporarily stabilizes the service
+*1630 Time spent in old garbage collection (metric that closely correlates with the outage) starts to rise again (see graph).
+*1821 Requestctl rule to mitigate abuse deployed, followed by a rolling restart of the WDQS service in CODFW.  Service starts to stabilize.
+*1924 Old GC is back down to the levels of the non-affected datacenter (eqiad). Incident closed.
+
+==Detection==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error</mark>
+
+Detected by monitoring
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+See above for example.
+
+<mark>Did the appropriate alert(s) fire?</mark> 
+
+Yes
+
+<mark>Was the alert volume manageable?</mark> 
+
+Yes
+
+<mark>Did they point to the problem with as much accuracy as possible?</mark>
+
+No. We saw increased 5xx errors and lots of time spent in old garbage collection, but it's still difficult to troubleshoot this type of abuse. 
+
+==Conclusions ==
+
+===What went well?===
+
+* Alerts fired promptly 
+* Other SREs provided lots of help.
+
+===What went poorly?===
+
+* Finding the right query/abusive IP etc for WDQS takes a long time, and solutions are often incomplete due to the fragile nature of the service.
+
+===Where did we get lucky?===
+
+* SMEs for the service were at work when the alerts fired
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* …
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

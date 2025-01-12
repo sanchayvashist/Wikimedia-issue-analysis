@@ -1,0 +1,65 @@
+{{irdoc|status=draft}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+Logstash indexes were temporarily stale with newer messages from Kafka not yet available. This was caused by <mark>TODO</mark>.
+
+'''Impact''': Monitoring alerts that are based on Logstash missed potential errors. Developers were briefly unable to see the latest messages in Kibana. They may've also been reduced availability in querying older messages from Logstash.
+
+{{TOC|align=right}}
+
+== Timeline ==
+<mark>Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.</mark>
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+<mark>Link to a specific offset in SAL using the SAL tool: https://tools.wmflabs.org/sal/, For example: https://tools.wmflabs.org/sal/production?q=synchronized&d=2012-01-01</mark>
+
+'''All times in UTC.'''
+
+* 00:00 (TODO) '''OUTAGE BEGINS'''
+* 00:04 (Something something)
+* 00:06 (Voila) '''OUTAGE ENDS'''
+* 00:15 (post-outage cleanup finished)
+
+<!-- Reminder: No private information on this page! -->
+<mark>TODO: Clearly indicate when the user-visible outage began and ended.</mark>
+
+== Detection ==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+== Conclusions ==
+<mark>What weaknesses did we learn about and how can we address them?</mark>
+
+=== What went well? ===
+* <mark>(Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+=== What went poorly? ===
+* <mark>(Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+=== Where did we get lucky? ===
+* <mark>(Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+=== How many people were involved in the remediation? ===
+* <mark>(Use bullet points) for example: 2 SREs and 1 software engineer troubleshooting the issue plus 1 incident commander</mark>
+
+== Links to relevant documentation ==
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+== Actionables ==
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+* <mark>To do #1 (TODO: Create task)</mark>
+* Create spiceracks cookbooks for restarting Logstash's Elastic cluster (we have ones for Cirrus' Elastic cluster) – https://phabricator.wikimedia.org/T255864
+
+<mark>TODO: Add the [https://phabricator.wikimedia.org/project/view/4758/ #Wikimedia-Incident-Prevention] Phabricator tag to these tasks.</mark>

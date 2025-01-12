@@ -1,0 +1,9 @@
+{{irdoc|status=final}}
+
+==Summary==
+'''Impact:'''
+
+For approximately 5 minutes, Wikipedia and other Wikimedia sites were slow or inaccessible for many users, mostly in Europe/Africa/Asia.
+
+'''Documentation''':
+*https://www.wikimediastatus.net/incidents/ft72m2rcs8tg

@@ -1,0 +1,135 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| id = dawiktionary/dawiki/svwiktionary partial outage
+| task = T338193
+| paged-num = 14
+| responders-num = 4
+| coordinators = cwhite
+| start = 2023-06-06 00:30:00
+| end = 2023-06-06 03:49:00
+| impact = All users of dawiktionary, dawiki, and svwiktionary sometimes received fatal exceptions while browsing.
+}}
+
+All users of dawiktionary, dawiki, and svwiktionary sometimes received fatal exceptions while browsing.  Logs indicated MediaWiki was encountering a data  issue which also entered the object cache.  The source of the problem was traced back to a data migration implementation bug in how bash interprets double-quotes (") characters.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*2023-05-31 15:45 low level of 500 errors on dawiktionary - data encoding migration begins: {{PhabT|128155}}
+*2023-06-06 00:30 errors dramatically increase - '''OUTAGE BEGINS'''
+*2023-06-06 01:35 UBN {{PhabT|338193}} filed
+*2023-06-06 02:36 Problem escalated to SRE via Klaxon - investigation begins
+*2023-06-06 03:36 Investigation yields possible data issue - Escalated to DBA running the encoding migration
+*2023-06-06 03:49 Responding DBA detects and implements the fix - Client-facing errors stop - '''OUTAGE ENDS'''
+
+==Detection==
+The issue was noticed by a volunteer and reported after business hours via IRC.  Another volunteer saw the IRC message and escalated to SRE via Klaxon.
+
+==Conclusions ==
+
+===What went well?===
+
+* Klaxon notified SRE and a number of engineers responded quickly.
+* VO made it easy to escalate the issue to another engineer.
+* Once a DBA arrived, the issue was fixed quickly and the root cause identified.
+* We intentionally started with small wikis on legacy encoding. Dutch Wikipedia and English Wikipedia could have had the outage instead.
+
+===What went poorly?===
+
+* The problem surfaced inconsistently when running spot-checks.
+* The problem resolution required deep technical knowledge of MediaWiki data formats and internal caching systems.
+
+===Where did we get lucky?===
+
+* It was early in the morning for them, but a DBA with the necessary expertise responded to the call when requested.
+
+==Links to relevant documentation==
+
+* N/A
+
+==Actionables==
+
+* TODO
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|Not Used
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|Klaxon
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

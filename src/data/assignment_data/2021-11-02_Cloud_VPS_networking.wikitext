@@ -1,0 +1,115 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID'''
+|2021-11-02 Cloud VPS networking
+| '''UTC Start Timestamp:'''
+|2021-11-02 11:35:00
+|-
+| '''Incident Task'''
+| [https://phabricator.wikimedia.org/T294853 T294853]
+|'''UTC End Timestamp'''
+|2021-11-02 13:20:00
+|-
+|'''People Paged'''
+| 0
+|'''Responder Count'''
+| 3: Dcaro, Aborrero, Majavah (+ volunteers reporting on IRC)
+|-
+|'''Coordinator(s)'''
+| No ICs
+|'''Relevant Metrics / SLO(s) affected'''
+| No SLO defined
+|-
+| '''Summary:'''
+| colspan="3" |For about 1 hour and 40 minutes, Toolforge services and VMs in Cloud VPS may have experienced connectivity issues
+|}After a kernel upgrade for several Cloud VPS network components (cloudnet, cloudgw servers; see [[phab:T291813|T291813]]), we found problems with Toolforge NFS in Kubernetes. Later LDAP connections were found to be affected. Eventually it turned out to be a problem with all ingress traffic to the network edge for cloud VMs (except those with floating IPs, which were unaffected). The issue was resolved by rolling back the kernel upgrade.
+
+'''Impact''': For about 1 hour and 40 minutes, Toolforge services and VMs in Cloud VPS may have experienced connectivity issues
+
+=Scorecard=
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" | People
+| Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|0
+|
+|-
+| Were more than 5 people paged? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|1
+|
+|-
+! rowspan="5" |Process
+| Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+| Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+| Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|9
+|
+|}
+= Actionables =
+* Incident tracking task, [[phab:T294853|T294853]]
+
+* Improve automated testing and monitoring of cloud networking, [[phab:T294955|T294955]]
+* Set up static route for cr-codfw, [[phab:T295288|T295288]]
+* Avoid keepalived flaps when rebooting servers, [[phab:T294956|T294956]]

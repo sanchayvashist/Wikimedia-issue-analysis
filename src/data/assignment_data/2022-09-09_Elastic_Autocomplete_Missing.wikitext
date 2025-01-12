@@ -1,0 +1,144 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task = T317381
+| paged-num = 0
+| responders-num = 3
+| coordinators = 
+| start = 2022-09-09 00:18
+| end = 2022-09-09 08:10
+| impact = For 4-8 hours, Wikipedia autocomplete search results were often weird and unhelpful.
+}}
+
+Wikimedia users noticed "weird and unhelpful search results," specifically with regards to autocomplete, as documented [[:en:Wikipedia:Village_pump_(technical)#Weird_and_unhelpful_autocompleted_search_results|here]]. This was an unexpected result of changes related to [[phab:T308676|Search Platform's Elasticsearch 7 upgrade]].
+
+{{TOC|align=right}}
+
+==Timeline== 
+
+''All times in UTC.''
+
+*1 September 2022: The Elasticsearch 7 upgrade plan includes a planned switch from Eqiad to Codfw, where Codfw is upgraded first, then we switch traffic, and once Eqiad is upgraded we switch back. This was [[gerrit:c/operations/mediawiki-config/+/824787|set in wmf-config]] by automatically switching based on the next MW branch.
+*7 September 2022: ElasticSearch maintenance script runs from MediaWiki 1.39-wmf.27 branch (old branch, only compatible with ES6) and tries to build indices on Codfw, which run ES7 already. Unbeknownst to us, this rebuild silently failed in Codfw.
+*8 September 2022, 21:18:44: The train rolls out 1.39-wmf.28 to all wikis ([https://wikitech.wikimedia.org/w/index.php?title=Deployments&oldid=2012315#deploycal-item-20220908T1800 schedule], [https://sal.toolforge.org/production?p=0&q=wikiversions&d=2022-09-08 SAL]) and traffic switches to Codfw as planned, effectively exposing the failed indices to live traffic.
+9 September 2022:
+*00:18: Autocomplete caches expire.  '''START OF ISSUE.''' Matching time Wikipedia editors report first observing it ("as of around an hour" at 1AM).
+*01:00: [[:en:Wikipedia:Village_pump_(technical)/Archive_200#Weird_and_unhelpful_autocompleted_search_results|Wikipedia editors report "weird and unhelpful search results"]], specifically with regards to autocomplete.
+*02:13:24: Legoktm reports the issue to the team in IRC #wikimedia-search.
+*05:10:37: ebernhardson switches $wgCirrusSearchUseCompletionSuggester to use <code>build</code> (disabling the completion suggester, falling back to prefix search) to work around the issue. Autocomplete caches for 3 hours, so in worst-case scenario, users impacted until 08:10:37.
+*08:10: '''END OF ISSUE.'''
+*14:00: PoolCounter rejections increase to around 5% due to use of prefix search as opposed to CirrusSearch-Completion (this is a QoS limitation as opposed to a resource limitation).
+*14:30: PoolCounter rejections drop as CompletionSuggestor is re-activated via [[gerrit:c/operations/mediawiki-config/+/830978|this patch]].
+<!-- Reminder: No private information on this page! -->==Detection==
+Detection: [[:en:Wikipedia:Village_pump_(technical)/Archive_200#Weird_and_unhelpful_autocompleted_search_results|users reported the error]]
+
+Alerts: None
+
+==Conclusions==
+
+===What went well?===
+
+* ebernhardson quickly realized the root cause and worked around it.
+
+===What went poorly?===
+
+* Monitoring did not detect the issue
+* We did not realize this could happen and thus did not include it in our ES7 rollout plan
+* We did not communicate adequately around the upgrade.
+
+===Where did we get lucky?===
+
+*ebernhardson was still online after work hours, and was able to address the issue.
+
+==Links to relevant documentation==
+
+* None
+
+==Actionables==
+
+*Create documentation on UpdateSuggesterIndex.php, probably should go on [[labsconsole:Search|the Search page]]
+*[[phab:T313095|Better monitoring]], specifics to be added later
+*[[phab:T317442|Sanity-checking for index size/age]] 
+*Pool counter limits should be verified against what's running in production (CompletionSuggest limits are much higher than PrefixSearch, and when we gracefully degrade to PrefixSearch, we need more slots for PrefixSearch). Probably add this as a test this in mediawiki-config.
+*Better communication, so others are aware when we roll out a major version change.
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

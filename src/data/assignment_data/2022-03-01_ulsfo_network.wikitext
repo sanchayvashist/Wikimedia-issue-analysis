@@ -1,0 +1,101 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 
+| responders-num = 4
+| coordinators = jhathaway
+| start = 2022-03-01 22:35:25
+| end = 2022-03-01 22:55:00
+| impact = For 20 minutes, clients normally routed to Ulsfo were unable to reach any of our projects. This includes New Zealand, parts of Canada, and the United States west coast.
+}}
+Multiple of our redundant network providers for the San Francisco datacenter simultaneously experienced connectivity loss. After 20 minutes, clients were rerouted to other datacenters.
+
+'''Documentation''':
+*https://gerrit.wikimedia.org/r/c/operations/dns/+/767250/
+*https://www.wikimediastatus.net/incidents/2rp6n2cpym3m
+*https://phabricator.wikimedia.org/P21629#102776
+
+==Actionables==
+
+* [[phab:T303219|T303219]] Integrate DNS depools with Etcd and automate/remove the need for writing a Git commit.
+
+* Can we increase fiber redundancy?
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|one appears to be an open question
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|7
+|
+|}

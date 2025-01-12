@@ -1,0 +1,99 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task =T308380 
+| paged-num =26 
+| responders-num =10 
+| coordinators =jwodstrcil 
+| start =2022-05-20 09:35:00 
+| end =2022-05-20 09:35:00 
+|impact=Two occurrences of impact on uncached traffic (high latency, unavailability) related to application server worker thread exhaustion caused by slow database response.}}
+
+On 2022-05-14 at 8:18 UTC there was a 3 minute impact on uncached traffic (high latency, unavailability) related to application server worker thread exhaustion caused by slow database response. There was no clear root cause at the time. The incident occurred again on the same database host on 2022-05-20 at 09:35 UTC, this time lasting for 5 minutes. After further investigation the likely root cause is a MariaDB 10.6 performance regression under load, further researched in https://phabricator.wikimedia.org/T311106.
+
+'''Documentation''':
+*[https://grafana.wikimedia.org/d/000000438/mediawiki-exceptions-alerts?orgId=1&var-datasource=eqiad%20prometheus%2Fops&viewPanel=18&from=1653039084000&to=1653040837000 MediaWiki Exceptions]
+
+==Actionables==
+
+*[[phab:T311106|Investigate mariadb 10.6 performance regression during spikes/high load]]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|yes
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|11
+|
+|}

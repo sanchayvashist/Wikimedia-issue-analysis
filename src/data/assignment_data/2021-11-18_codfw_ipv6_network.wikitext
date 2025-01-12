@@ -1,0 +1,128 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID'''
+|2021-11-18 codfw ipv6 network
+|'''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+|https://phabricator.wikimedia.org/T299968
+|'''UTC End Timestamp'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged'''
+|<amount of people>
+|'''Responder Count'''
+|<amount of people>
+|-
+|'''Coordinator(s)'''
+|Names - Emails 
+|'''Relevant Metrics / SLO(s) affected''' 
+|Relevant metrics
+% error budget
+|-
+|'''Summary:'''
+| colspan="3" |For 8 minutes, the Codfw cluster experienced partial loss of IPv6 connectivity for upload.wikimedia.org. Thanks to [[:en:Happy_Eyeballs|Happy Eyeballs]] there was no visible user impact (or, at worse, a slight latency increase). The Codfw cluster generally serves Mexico and parts of the US and Canada. The upload.wikimedia.org service serves photos and other media/document files, such as displayed in Wikipedia articles.
+|}After preemptively replacing one of codfw row B spine switch (asw-b7-codfw) for signs of disk failure, the new switch was silently discarding IPv6 traffic (through and within the switch).
+
+As this switch was a spine, ~50% traffic toward that row (from cr2) was transiting through it.
+
+Row B being at this time the row hosting the load-balancer in front of upload-lb.codfw, this was the most visible impact.
+
+Monitoring triggered and the interface between asw-b7-codfw and cr2-codfw was disabled, forcing traffic through the cr1<->asw-b2-codfw link. Resolving the upload-lb issue.
+
+Replacing the switch didn't solve the underlying IPv6 issue, showing that it was not a hardware issue. Forcing a virtual-chassis master failover solved what we think was a Junos (switch operating system) bug.
+
+Note that at the time of the issue, our Juniper support contract was expired, preventing us from opening a JTAC case. 
+
+
+
+'''Impact''': For 8 minutes, the Codfw cluster experienced partial loss of IPv6 connectivity for upload.wikimedia.org. Thanks to [[:en:Happy_Eyeballs|Happy Eyeballs]] there was no visible user impact (or, at worse, a slight latency increase). The Codfw cluster generally serves Mexico and parts of the US and Canada. The upload.wikimedia.org service serves photos and other media/document files, such as displayed in Wikipedia articles.
+
+'''Documentation''':
+*Original maintenance/incident task, [[phab:T295118|T295118]]
+=Scorecard =
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" | People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no) 
+|0
+|page routed via batphone
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no) 
+|0
+|page routed via batphone
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|0
+|page routed via batphone
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|5
+|
+|}
+==Actionables==
+
+* Icinga check for ipv6 host reachability, [[phab:T163996|T163996]]

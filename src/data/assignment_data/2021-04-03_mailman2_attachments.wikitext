@@ -1,0 +1,85 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+Some mailing lists have disabled archiving, with the expectation that once current subscribers get a copy of the message then the mailing list server will no longer have a copy of the message. However, it saves any attachment permanently, crucially, this includes the HTML part of any multi-part message. These attachments are publicly accessible via a URL: <code>https://lists.wikimedia.org/pipermail/wikidata-bugs/attachments/20200901/7b1e75bd/attachment.htm</code>. It would require brute-forcing a 8 character hex string per day to figure out the URL. This functionality exists for the purpose of supporting digests, as the digests are sent as plain text and attachments are only referred to by URL. The URL is public because Mailman2 doesn't have any real web authentication support. It has been [https://bugs.launchpad.net/mailman/+bug/266317 publicly filed in the Mailman2 bug tracker] since 2006.
+
+Old messages have been kept since the entire lifetime of our Mailman2 installation. Audits of the available Apache HTTPD access logs (30 days) found no unauthorized access.
+
+A systemd timer was put in place to delete these archived attachments after 31 days. Some lists also disabled digests to prevent these attachment files from being saved in the first place. This issue was fully resolved with the migration to Mailman3, which does not suffer from this flaw.
+
+'''Impact''': Any person who sent an email to a list that was not supposed to be archived could have had their message contents publicly accessible and leaked. It is impossible to say whether someone ever did brute-force these URLs given how long this vulnerability was present and how short our access logs are kept for.
+
+{{TOC|align=right}}
+
+==Timeline==
+'''2021-04-03''' (Sat)
+
+* 15:18: <Amir1> [mailman2] keeps the attachments of mailing lists that are set to not keep an archive, which is a security issue, I’ll file a bug
+* 15:47: Amir opens [[phab:T279237|T279237]]
+* 19:55: Reuven notifies Legal and Faidon.
+
+'''2021-04-04''' (Sun)
+
+* 11:56: Amir discovers that the attachments have public-facing URLs.
+* 14:02: Amir deletes all lgbt@ attachments older than 2020, leaving the newer ones for investigation.
+
+'''2021-04-05''' (Mon)
+
+* 15:45: [https://docs.google.com/document/d/1ljqsPY3FdP3uK6NocZb0UAk3siayNYsKb3duZ5CWgN0/edit#heading=h.bp8wb4pwerhj Incident opened]. Reuven becomes IC.
+* 19:30: Reuven checks Apache access logs on lists1001 and verifies no one has brute-forced the attachment URLs during the logs retention period (30 days).
+* 21:32: Kunal runs purge_attachments.py manually, deleting all attachments from all no-archive lists with a datestamp older than 31 days. List of deleted files is in lists1001:/home/legoktm/attachments.txt. Also manually deleted /var/lib/mailman/archives/private/helpdesk-l/attachments/20070931 and /var/lib/mailman/archives/private/pressemeldungen/attachments/20070931 (note that September 31st is not a real date)
+
+'''2021-04-06''' (Tues)
+
+* 23:30: Kunal re-runs purge_attachments to clean up one more day’s worth of attachments. Log is at lists1001:/home/legoktm/attachments2.txt.
+
+'''2021-04-13''' (Tues)
+
+* 16:40: Kunal deploys systemd timer to automatically run purge_attachments and kicks off a manual run. It’ll now run at midnight UTC every day. Logs of deletions should be at /var/log/purge_attachments/ going forward.
+* 17:00 rzl closes the incident, since the 31-day automatic purge is enough for the medium-term. The Bacula issue is still open; will continue to follow up.
+
+'''2021-04-15'''
+
+* Jamie configures backups to ignore attachments directory for lists that have archiving disabled: [[gerrit:679869]]
+
+'''2021-04-20'''
+
+* Kunal verifies that Mailman3 does not also suffer from this flaw
+
+'''2021-05-03'''
+
+* Amir [[phab:T280322#7054296|migrates]] lists with archiving disabled ("Group A") over to Mailman3
+
+==Detection==
+Amir discovered this issue while going through archives on lists1001 while preparing for the Mailman3 migration. It's unclear how we could have noticed this automatically or through monitoring.
+
+==Conclusions==
+===What went well?===
+
+* We were able to quickly (within 2 days, on the first weekday) put together a script to purge old attachments.
+* We were already in the progress of moving to a newer version of Mailman that didn't have this issue.
+
+===What went poorly?===
+
+* This vulnerability has been publicly known about since 2006, and we've generally known that Mailman2 is insecure since forever.
+* Mailman2 was keeping archives for 20070931, a day that does not exist, suggesting that it is/was possible to spoof dates.
+
+===Where did we get lucky?===
+
+* The tokens that Mailman2 used appear to have been random enough to prevent basic brute-forcing.
+* No one apparently exploited this issue for the nearly 2 decades we've used Mailman.
+
+===How many people were involved in the remediation?===
+*3 SREs and 1 software engineer
+
+==Actionables==
+
+* {{Done}} Set up a timer to purge old attachments
+* {{Done}} Verify Mailman3 does not have this issue
+* {{Done}} Ensure digest message contents are excluded from Mailman2 and Mailman3 backups
+* {{Done}} Migrate all lists with archiving disabled over to Mailman3

@@ -1,0 +1,199 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T366094
+| paged-num = 4
+| responders-num = effie, hugh, alex, kamila, marostegui, cdanis, rzl
+| coordinators = Kamila, Reuven
+| start = 2024-05-28 12:23
+| end = 2024-05-28 17:00
+| metrics = No relevant SLOs exist. The only metric that comes to mind as relevant is deployment failures. A possible future SLO is Kubernetes API availability.
+| impact = No impact for wiki users. 4 MediaWiki deployments failed. A global scap lock was put into place as a precautionary measure against bad UX for deployers
+}}
+
+<!-- Reminder: No private information on this page! -->Triggered by a failed scap deployment of MediaWiki, the team dug into figuring out the underlying causes, unearthing a network and CPU saturation at the WikiKube Kubernetes cluster api servers. Aside from the issue being witnessed by 2 deployers, no other discernible impact was observed. As an inadvertent result of the investigation, scap deployments became faster.
+
+They were multiple interrelated causes that contributed and made debugging slower
+
+# For the past few months, during any MW deploy, we've been saturating k8s control plane CPU in both [https://grafana-rw.wikimedia.org/goto/UzvUYZsIR?orgId=1 eqiad] and [https://grafana-rw.wikimedia.org/goto/GxZlYWyIR?orgId=1 codfw]. [[File:2024-05-28 k8s codfw cpu saturation.png|alt=A graph showing slowly increase CPU saturation for codfw api servers|thumb|A graph showing slowly increasing CPU saturation for codfw api servers]][[File:2024-05-28 api eqiad.png|alt=A graph showing slowly increase CPU saturation for eqiad api servers|thumb|A graph showing slowly increasing CPU saturation for eqiad api servers]]The saturation also manifested as [https://grafana.wikimedia.org/goto/hIvtEZsSg?orgId=1 slowly increasing latencies for blackbox probes]
+# More and more worker servers were being added to the WikiKube clusters
+# 1 of the kubemaster VMs was on a 1G Ganeti node, the other one on a 10G ganeti node. After the first incident, the second kubemaster (the one on 1G ganeti node) took over part of the load. Network wise, it was unable to sustain the level of traffic and ended up having ~6k TCP retransmits per second.
+# At the end of the week before the incident, we had enabled OpenTelemetry collector in eqiad, following a successful deployment in codfw
+# We were in the process of adding more kubernetes api-servers in both datacenters.[[File:2024-05-28-blackbox-probe-latency.png|alt=Slowly increasing blacbox probe latency|thumb|Slowly increasing blackbox probe latency]]
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC. Incident investigation spans 3 days.'' 
+
+* 12:23 <TimStarling> ^ trying to deploy a single-file change but k8s is very slow
+* 12:23  <TimStarling> 12:23:11 Command '['helmfile', '-e', 'eqiad', '--selector', 'name=main', 'apply']' returned non-zero exit status 1.
+
+* 12:35:09  <TimStarling> Started sync-prod-k8s [retry]
+* First page: [12:49:12] '''<+jinxer-wm>''' FIRING: ProbeDown: Service kubemaster1002:6443 has failed probes (http_eqiad_kube_apiserver_ip6) #page - [[Runbook#kubemaster1002:6443|https://wikitech.wikimedia.org/wiki/Runbook#kubemaster1002:6443]] - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/custom&var-module=All</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki> '''INCIDENT BEGINS'''
+* [12:52:08] '''<hnowlan>''' effie and I are looking at this, unclear what's wrong. pybal is failing to connect to the masters 
+* [12:52:12] A recovery arrives but it is not yet clear why, '''INCIDENT ENDS'''
+* Another page: [13:23:12] '''<+jinxer-wm>''' FIRING: ProbeDown: Service kubemaster1002:6443 has failed probes (http_eqiad_kube_apiserver_ip6) #page - [[Runbook#kubemaster1002:6443|https://wikitech.wikimedia.org/wiki/Runbook#kubemaster1002:6443]] - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/custom&var-module=All</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki> '''INCIDENT BEGINS''' 
+* 13:27:52:  Incident opened. '''Kamila''' becomes IC
+* 13:46:28 <cdanis> kamila_: scap lock is now in place per effie
+* 13:50  <akosiaris> ok first thing's first, apparently firewall for etcd isn't open on wikikube-ctrl1001
+* 13:54 akosiaris manually opened firewall port, cluster-health happy now – but probably a red herring
+* 14:10 cdanis notices TCP retransmits, new issue, time seems to correlate – https://grafana.wikimedia.org/d/000000377/host-overview?orgId=1&refresh=5m&var-server=kubemaster1002&var-datasource=thanos&var-cluster=kubernetes&from=1716895422330&to=1716906222330&viewPanel=31
+* 14:24 <akosiaris> the VM maxed out the veth https://grafana.wikimedia.org/d/000000377/host-overview?orgId=1&refresh=5m&var-server=kubemaster1002&var-datasource=thanos&var-cluster=kubernetes&viewPanel=8&from=1716895728975&to=1716906528975
+* 14:22 effie deploys https://gerrit.wikimedia.org/r/1036680
+* 14:30 cdanis looks at retransmits
+* 14:30 <cdanis> so that looks like traffic to *other* k8s api servers and also from etcd that is being retransmitted
+* 14:30 <cdanis> so kinda everything
+* 14:56 <akosiaris> !log migrate kubemaster1002 to ganeti1037 [10G NIC, was 1G]
+* <akosiaris>	Tue May 28 15:00:28 2024 * memory transfer progress: 113.26 %
+* 15:02:20	<cdanis>	kubemaster1001 just saturated
+* 15:02:23	<cdanis>	briefly
+* 15:03:04	<akosiaris>	all I did was to restart kube-apiserver on kubemaster1002 fwiw
+* 15:03:20	<cdanis>	ok so just startup then probably
+* 15:03:20	<akosiaris>	which adds credence to your theory that we were maxing out on both
+* 15:03:53	<akosiaris>	VM migration done, I 'll start up the test shortly
+* 15:12	akosiaris rolling-restarts kube-apiserver; NIC no longer saturated
+* 15:24	rzl becomes IC
+* 15:58	cdanis identifies that the kubemaster IPs are hardcoded in the otelcol values file, as of the end of last week, so it can only talk to the legacy hosts (10.64.0.117, 10.64.32.116)
+* 16:00	cdanis uninstalls opentelemetry-collector in eqiad (later merged as https://gerrit.wikimedia.org/r/1036707)
+* 16:08	Amir runs a scap backport, which saturates kubemaster1001 CPUs again but not for long enough that they either fail probes or reach scap’s timeout
+* 17:00	Decision to leave things as-is over the EU nighttime, since they’re not ideal but workable for deployments. rzl stands down as IC '''INCIDENT ENDS'''
+[[File:2024-05-28 k8s api tests.png|alt=Graphs showing behavior during tests|thumb|Graphs showing behavior during tests]]
+
+=== Following day 2024-05-29. ===
+* From [https://sal.toolforge.org/log/wt-tw48BhuQtenzvHHc- 09:27] until [https://sal.toolforge.org/log/HSkaxI8BxE1_1c7sPl4P 11:26] Alex runs a battery of tests against the kube-API servers, using a simulation of deployments. The entirety of it is in [[phab:T366094#9842257|T366094#9842257]]. It mostly matches what [[phab:T366094#9840665|Chris wrote the previous day]] with 1 difference of identifying OpenTelemetry collector as a contributing factor to the packet loss and NIC saturation observed by +50%. The tests didn't cause any issue aside from some temporary increase in latency that subsided quickly.
+* 2 new controller nodes added => stable
+* OTel collector still disabled
+** mitigation in place for later: logs & metrics pipelines disabled => hoped to reduce bandwidth usage to ⅓ of original (1/3rd did not pan out, but the reduction later was still substantial)
+[[File:T366094 reduction in otelcol traffic due to configuration changes.png|thumb|Reduction in otel collector traffic due to configuration changes. eqiad (without otelcol running at this point) is used as "control" while config is changed on codfw]]
+
+=== Following day 2024-05-30 ===
+* 02:02. [[phab:T366094#9844588|Chris corroborates]] that OpenTelemetry collector increases substantially the network traffic to WikiKube API servers and searches for fixes.
+* 19:53. Two fixes by Chris in OpenTelemetry collector's configuration managed to lower the increase to ~10-15% (comparing codfw to eqiad)
+* all 3 new dedicated nodes added, old nodes still in place for the extra network capacity, everything is stable
+* Followup filed to upgrade to 10G NICs on the bare metal hosts, which should allow the Ganeti VMs to be removed.
+
+==Detection==
+The issue was detected due to a failed deployment and this necessitates right a human witness. There were alerts of the following nature<syntaxhighlight lang="bash">
+FIRING: ProbeDown: Service kubemaster1002:6443 has failed probes
+</syntaxhighlight>These alerts have been firing for some time every now and then. However, 
+
+# Due to the very slow increasing nature of the underlying cause (latency due to CPU saturation) it wasn't possible to correlate it. Furthermore when they accompanied caused an incident, corrective action was already being taken (moving Kubernetes masters to dedicated machines)
+# The CPU saturation events were short enough to not show up in the "Host Overview" Grafana dashboard. This effect was exacerbated by the fact the CPU panels in that dashboard use a resolution of 1/3.
+
+==Conclusions ==
+
+Growing pains for the WikiKube cluster during the mw-on-k8s project were expected. There had already been Kubernetes API related incidents and the team, after an investigation, concluded that adding more etcd capacity, in the form of 3 new dedicated stacked API servers would alleviate those problems. However,
+
+* It appears there were also short CPU saturation problems that were never directly detected that caused eventually a few failed deployments.
+* The default configuration of the OpenTelemetry collector with [https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/processor/k8sattributesprocessor/README.md k8sattributesprocessor] enabled increased the level of network traffic egressing API servers by > 50%. Cumulative traffic egressing from all API servers reached 272MB/s (~2.1Gbps), enough to saturate heavily any 1Gbps link.
+* There are 2 different methods of load balancing regarding traffic to the API servers. One from workloads outside the cluster itself (i.e. kubelet, scap, kube-proxy, rsyslog) and one from workloads inside the cluster, i.e. OpenTelemetry collector, Calico, eventrouter (we call these cluster components). The former go via LVS, the latter via Kubernetes probabilistic DNAT. The result is that the 2 methods might end up sending traffic to different sets of nodes, complicating things.
+
+===What went well?===
+
+* The incident did not impact anyone aside from 2 deployers. End users saw minimal issues, the biggest being a perceived slowness during a few tests.
+* We had alerts and good communication between members. An IC took over quickly, they also handed over to a different IC when needed.
+
+===What went poorly?===
+
+* The short CPU saturation events were not noticed earlier.
+* The deployment of the OpenTelemetry collector in codfw coincided with the addition of new Kubernetes API servers, effectively utilizing the extra capacity added there making codfw a not so good testbed for the enablement to eqiad.
+
+===Where did we get lucky?===
+
+* The incident happened during EU morning hours, allowing a large percentage of the Service Operations team, which owns the WikiKube clusters to be present and help with figuring out the situation
+* Getting rid of the CPU saturation during Mediawiki deploys doubled k8s deployment speed.  We went from ~7 minutes to ~3.5 minutes to do a full scap "sync" to k8s.
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* A decision was made to add 10G cards to all new WikiKube api servers. [[phab:T366204|T366204]] and [[phab:T366205|T366205]]. 
+* Poke otelcol upstream about using the Kubelet /pods interface  {{Done}}  https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/14475#issuecomment-2145825911 
+* Investigate whether the resolution of https://grafana.wikimedia.org/d/000000377/host-overview?orgId=1&refresh=5m&viewPanel=3 can be 1/1 instead of 1/3?
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|not needed
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|12
+|Counting public entry as "yes"
+|}

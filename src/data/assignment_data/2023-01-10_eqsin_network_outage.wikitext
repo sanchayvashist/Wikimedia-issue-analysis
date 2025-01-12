@@ -1,0 +1,287 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T328354
+| paged-num = Batphone
+| responders-num = 5
+| coordinators = adenisse
+| start = 2023-01-10 16:00:00
+| end = 2023-01-10 20:57
+| impact = Users in Asia were affected for ~11 to 41 minutes
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->eqsin is connected to the core DCs via two transport links, one of them has been suffering a long fiber cut (see [[phab:T322529|T322529]]) the other one went down due to a planned maintenance from the transport provider. 
+
+For ~11min (+ the time user's DNS resolvers pick up eqsin depool, long tail up to 30min) users normally redirected to eqsin (mostly in the APAC region) were only able to read Wikipedia pages already cached in eqsin.{{TOC|align=right}}
+
+==Timeline==
+'''Dec 22, 2022:''' 
+
+16:06 UTC: Planned Work PWIC225900 Notification from Arelion
+
+'''Jan 9, 2022:'''
+
+16:06 UTC: Reminder for Planned Work PWIC225900 from Arelion
+
+'''Jan 10, 2022:'''
+
+16:00: Service Window for PWIC225900 starts
+
+16:37: <+icinga-wm> PROBLEM - BGP status on cr3-eqsin is CRITICAL: BGP CRITICAL - AS1299/IPv6: Active - Telia, AS1299/IPv4: Active - Telia [[Network monitoring#BGP status|https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status]]
+
+16:44: <+icinga-wm> PROBLEM - BGP status on cr2-eqsin is CRITICAL: BGP CRITICAL - No response from remote host 103.102.166.130 [[Network monitoring#BGP status|https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status]]
+
+16:45 AM <+icinga-wm> PROBLEM - Host bast5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:45 AM <+icinga-wm> PROBLEM - Host doh5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:45 AM <+icinga-wm> PROBLEM - Host prometheus5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host ncredir5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host netflow5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host cr2-eqsin #page is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host durum5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host cr3-eqsin #page is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host ncredir5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host durum5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host install5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host doh5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:47 AM <+icinga-wm> PROBLEM - Host upload-lb.eqsin.wikimedia.org is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:47 AM <+icinga-wm> PROBLEM - Host text-lb.eqsin.wikimedia.org is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:48 AM <bblack> !log depooling eqsin from DNS
+
+16:49 AM <+icinga-wm> PROBLEM - Host cr2-eqsin IPv6 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:50 AM <+icinga-wm> PROBLEM - Host mr1-eqsin IPv6 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:50 AM <+icinga-wm> PROBLEM - Host cr3-eqsin IPv6 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:50 AM <+icinga-wm> PROBLEM - Host ripe-atlas-eqsin IPv6 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:55 AM <+icinga-wm> RECOVERY - Host netflow5002 is UP: PING OK - Packet loss = 0%, RTA = 247.25 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host durum5002 is UP: PING OK - Packet loss = 0%, RTA = 238.90 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host doh5001 is UP: PING OK - Packet loss = 0%, RTA = 244.81 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host durum5001 is UP: PING OK - Packet loss = 0%, RTA = 242.79 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host install5001 is UP: PING OK - Packet loss = 0%, RTA = 232.47 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host ncredir5001 is UP: PING OK - Packet loss = 0%, RTA = 233.62 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host prometheus5001 is UP: PING OK - Packet loss = 0%, RTA = 250.70 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host ncredir5002 is UP: PING OK - Packet loss = 0%, RTA = 231.49 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host cr2-eqsin #page is UP: PING OK - Packet loss = 0%, RTA = 225.39 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host cr3-eqsin #page is UP: PING OK - Packet loss = 0%, RTA = 245.89 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host doh5002 is UP: PING OK - Packet loss = 0%, RTA = 253.59 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host cr2-eqsin IPv6 is UP: PING OK - Packet loss = 0%, RTA = 224.01 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host text-lb.eqsin.wikimedia.org is UP: PING OK - Packet loss = 0%, RTA = 231.29 ms
+
+16:55 AM <+icinga-wm> RECOVERY - Host mr1-eqsin IPv6 is UP: PING OK - Packet loss = 0%, RTA = 245.15 ms
+
+16:56 AM <+icinga-wm> RECOVERY - Host cr3-eqsin IPv6 is UP: PING OK - Packet loss = 0%, RTA = 243.03 ms
+
+16:56 AM <+icinga-wm> RECOVERY - Host bast5002 is UP: PING OK - Packet loss = 0%, RTA = 254.35 ms
+
+16:56 AM <+icinga-wm> RECOVERY - Host ripe-atlas-eqsin IPv6 is UP: PING OK - Packet loss = 0%, RTA = 251.84 ms
+
+16:56 AM <+icinga-wm> RECOVERY - Host upload-lb.eqsin.wikimedia.org is UP: PING OK - Packet loss = 0%, RTA = 237.02 ms
+
+16:57 AM <+icinga-wm> RECOVERY - OSPF status on cr1-codfw is OK: OSPFv2: 6/6 UP : OSPFv3: 6/6 UP [[Network monitoring#OSPF status|https://wikitech.wikimedia.org/wiki/Network_monitoring%23OSPF_status]]
+
+17:00 AM <+icinga-wm> PROBLEM - Check unit status of netbox_ganeti_eqsin_sync on netbox1002 is CRITICAL: CRITICAL: Status of the systemd unit netbox_ganeti_eqsin_sync [[Monitoring/systemd unit state|https://wikitech.wikimedia.org/wiki/Monitoring/systemd_unit_state]]
+
+8:33 UTC: repooling
+
+= Detection =
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+Automated monitoring
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+16:37 AM <+icinga-wm> PROBLEM - BGP status on cr3-eqsin is CRITICAL: BGP CRITICAL - AS1299/IPv6: Active - Telia, AS1299/IPv4: Active - Telia [[Network monitoring#BGP status|https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status]]
+
+16:44 AM <+icinga-wm> PROBLEM - BGP status on cr2-eqsin is CRITICAL: BGP CRITICAL - No response from remote host 103.102.166.130 [[Network monitoring#BGP status|https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status]]
+
+16:45 AM <+icinga-wm> PROBLEM - Host bast5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:45 AM <+icinga-wm> PROBLEM - Host doh5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:45 AM <+icinga-wm> PROBLEM - Host prometheus5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host ncredir5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host netflow5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host cr2-eqsin #page is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host durum5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host cr3-eqsin #page is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host ncredir5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host durum5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host install5001 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:46 AM <+icinga-wm> PROBLEM - Host doh5002 is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:47 AM <+icinga-wm> PROBLEM - Host upload-lb.eqsin.wikimedia.org is DOWN: PING CRITICAL - Packet loss = 100%
+
+16:47 AM <+icinga-wm> PROBLEM - Host text-lb.eqsin.wikimedia.org is DOWN: PING CRITICAL - Packet loss = 100%
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable?</mark> 
+
+Yes, the appropiate alerts fired.
+
+No, the alert volume was hard to handle on IRC and 3 pages triggered at the same time, two of them escalated to batphone.
+
+<mark>Did they point to the problem with as much accuracy as possible?</mark>
+
+Yes.
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+A flood of host down alerts usually mean a network related issue.
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* Site was depooled quickly. "depool first, investigate later" was the correct attitude to adopt
+* Automated monitoring detected the issue
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* eqsin stayed too long with a single operational transport link
+* The overlapping transport links downtime were not caught by SREs
+* The planned maintenance of the provider was not in a task/reminder
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* The outage happened when many SREs were connected
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* Create a backup GRE tunnel - https://phabricator.wikimedia.org/T327265
+* Ensure the long down transport link comes back up properly once fixed - https://phabricator.wikimedia.org/T322529
+* Automatically parse maintenance notifications and alert on conflicting maintenance - https://phabricator.wikimedia.org/T230835
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|no, 2 of the 3 pages escalated to batphone
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|same as above
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|https://www.wikimediastatus.net/incidents/h3kkhqf88msr
+|-
+|Is there a phabricator task for the incident?
+|yes
+|T328354
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|There was no open task but one could be open as soon as we receive the maintenance email from the provider.
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|11
+|
+|}

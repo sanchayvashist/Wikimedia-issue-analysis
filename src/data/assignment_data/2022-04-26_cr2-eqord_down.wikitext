@@ -1,0 +1,104 @@
+{{irdoc|status=review}}
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 18
+| responders-num = 5
+| coordinators = marostegui
+| start = 05:13
+| end = 07:27
+| metrics = None.
+| impact = None.
+}}Since the previous evening (April 25), the Telia link from Eqord to Eqiad was down due to a fiber cut. At 05:00 the next morning, a Telia maintenance began that took down our remaining transports from Eqord, to Codfw and Ulsfo. As a result, we were entirely unable to reach the Eqord networking equipment. There was no end-user impact since Eqord is a network-only location with end-user traffic for [[Codfw data center|Codfw]] and [[Ulsfo data center|Ulsfo]] naturally going there directly instead of via Eqord.
+
+
+<code>cathal@nbgw:~$ ping -c 3 208.115.136.238 PING 208.115.136.238 (208.115.136.238) 56(84) bytes of data.  --- 208.115.136.238 ping statistics ---  3 packets transmitted, 0 received, 100% packet loss, time 2055ms</code>
+
+Telia circuit failure logs:
+ Apr 25 17:32:42 cr2-eqord fpc0 MQSS(0): CHMAC0: Detected Ethernet MAC Remote Fault Delta Event for Port 5 (xe-0/1/5) 
+ Apr 26 05:11:57 cr2-eqord fpc0 MQSS(0): CHMAC0: Detected Ethernet MAC Remote Fault Delta Event for Port 3 (xe-0/1/3)
+ Apr 26 05:11:57 cr2-eqord fpc0 MQSS(0): CHMAC0: Detected Ethernet MAC Local Fault Delta Event for Port 0 (xe-0/1/0)
+ Apr 26 07:15:19 cr2-eqord fpc0 MQSS(0): CHMAC0: Cleared Ethernet MAC Remote Fault Delta Event for Port 3 (xe-0/1/3)
+ Apr 26 07:15:47 cr2-eqord fpc0 MQSS(0): CHMAC0: Cleared Ethernet MAC Local Fault Delta Event for Port 0 (xe-0/1/0)
+'''Documentation''':
+
+* [[Network design]]
+* [https://docs.google.com/document/d/13-kHFdSw33P6NJzS95c24zOHaJAKvVSl8DFF3o6VCmY/edit Restricted document]
+
+==Actionables==
+* Grant Cathal authorization to be able to create remote hands cases (DONE)
+== Scorecard==
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+! Question
+!Score
+! Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no) 
+|0
+|Manually escalated to netops
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no) 
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+| Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no) 
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|7
+|
+|}

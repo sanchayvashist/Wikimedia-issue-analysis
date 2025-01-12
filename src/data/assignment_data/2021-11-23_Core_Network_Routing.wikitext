@@ -1,0 +1,116 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+== Summary ==
+{| class="wikitable"
+|'''Incident ID'''
+|2021-11-23 Core Network Routing
+|'''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+|[[phab:T299969|T299969]]
+| '''UTC End Timestamp'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged''' 
+| <amount of people> 
+|'''Responder Count'''
+|<amount of people> 
+|-
+|'''Coordinator(s)'''
+|Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget
+|-
+|'''Summary:'''
+| colspan="3" |For about 12 minutes, Eqiad was unable to reach hosts in other data centers (e.g. cache PoPs) via public IP addresses due to a BGP routing error. There was no impact on end-user traffic, and internal traffic generally uses local IP subnets that are routed with OSPF instead of BGP.
+|}At approx 09:37 on Tues 23-11-2021 a change was made on cr1-eqiad and cr2-eqiad, to influence route selection in BGP.  The specific change was to remove a BGP setting which causes the BGP "MED" attribute to be set to the OSPF cost to reach the next-hop of the BGP route, as part of [[phab:T295672|T295672]]. This caused a change in how routes to certain remote sites were evaluated by the core routers there. At a high-level the change meant that the correct, externally-learnt routes for remote BGP destinations, suddenly looked less preferable than reflections of these routes devices in eqiad were announcing to each other.
+
+For instance, cr2-eqiad was previously sending traffic for [[Eqsin cluster|Eqsin]] BGP routes via [[Codfw cluster|Codfw]]. But following the change BGP decided it was better to send this traffic to its local peer cr1-eqiad. Unfortunately, cr1-eqiad was a mirror image of this, and decided the best thing was to send such traffic to cr2-eqiad. A "routing loop" thus came into being, with the traffic never flowing out externally, but instead bouncing between the two [[Eqiad cluster|Eqiad]] routers. Alerts fired at 09:39, the first being due to Icinga in Eqiad failing to reach the public text-lb address in Eqsin (Singapore).  At 09:42 the configuration change was reverted on both devices by Cathal.  Unfortunately that did not immediately resolve the issue, due to the particular way these routes update on a policy change. After some further troubleshooting a forced reset was done to the BGP session between the eqiad routers at 09:51, which resolved the issue.
+
+The impact was noticed by Icinga via its health checks against edge caching clusters like Eqsin. However, the Icinga alert was likely also the only impact as we generally don't explicitly target remote data centers over public IP. The exception to that is [[WMCS]] instances, but that runs within Eqiad and DNS generally resolves public endpoints to the same DC, not a remote one.
+
+'''Impact''': For about 12 minutes, Eqiad was unable to reach hosts in other data centers (e.g. cache PoPs) via public IP addresses due to a BGP routing error. There was no impact on end-user traffic, and internal traffic generally uses local IP subnets that are routed with OSPF instead of BGP.
+
+== Actionables ==
+*Ticket [[phab:T295672|T295672]] has been updated with further detail on what happened and a proposal to adjust our BGP sessions to address both the "second IXP port" issue and prevent this happening again in future. The changes were backed out so situation is back to what it was before the incident.
+
+== Scorecard ==
+{| class="wikitable"
+!
+!Question
+! Score 
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no) 
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|paged via batphone
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|paged via batphone
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|paged via batphone
+|-
+! rowspan="5" |Process
+| Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+! colspan="2" align="right" | Total score
+|6
+|
+|}

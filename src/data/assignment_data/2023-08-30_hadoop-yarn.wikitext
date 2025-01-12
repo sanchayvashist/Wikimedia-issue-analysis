@@ -1,0 +1,209 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = data-engineering-alerts@lists.wikimedia.org list.
+| responders-num = 3 (2 Data Engineers + 1 Data platform SRE)
+| coordinators = Joseph Allemandou
+Antoine Quhen
+Steve Munene
+| start = 2023-08-29 11:02
+| end = 2023-08-30 16:22
+| impact = Partial log aggregation for yarn applications running on Hadoop worker nodes re-imaged between 2023-08-22 and 2023-08-30 namely an-worker11[13-28]
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->Log aggregation was failing on recently re-imaged Hadoop worker nodes. This was due to having the wrong value for the compression type to be used by the log aggregator service. This was spotted when some specific Airflow tasks were failing randomly when Airflow tried to fetch the aggregated logs. These were non-idempotent Airflow tasks (eg rm a tmp dir, or mv an previously created archive on HDFS). The Yarn applications were in a SUCCESS state, but the Airflow process failed to retrieve the logs and marked some of the task attempts as failed. This was fixed by correcting the compression type to ''gz'' from the erroneously submitted value of ''gzip.''{{TOC|align=right}}
+
+==Timeline==
+<mark>Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.</mark>
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC.''
+
+*2023-08-29 
+*11:02 Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-29T09:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*16:07 Airflow alert: <TaskInstance: pageview_hourly.move_data_to_archive scheduled__2023-08-29T13:00:00+00:00 [failed]>'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*16:13 Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-29T13:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*20:23 Airflow alert: <TaskInstance: druid_load_webrequest_sampled_128_hourly.remove_temporary_directory scheduled__2023-08-29T18:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*21:53 Airflow alert: <TaskInstance: druid_load_pageviews_hourly.remove_temporary_directory scheduled__2023-08-29T19:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*23:30 Airflow alert: <TaskInstance: pageview_hourly.move_data_to_archive scheduled__2023-08-29T20:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.' 2023-08-30
+*00:42 Airflow alert: <TaskInstance: projectview_geo.move_data_to_archive scheduled__2023-08-29T22:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*04:11 Airflow alert: <TaskInstance: pageview_hourly.move_data_to_archive scheduled__2023-08-30T02:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*04:29 Airflow alert: <TaskInstance: druid_load_webrequest_sampled_128_daily.remove_temporary_directory scheduled__2023-08-29T00:00:00+00:00 [failed]> Exception: SkeinHook druid_load_webrequest_sampled_128_daily__remove_temporary_directory__20230829 application_1692895131960_27376
+*08:03 Airflow alert: <TaskInstance: pageview_hourly.move_data_to_archive scheduled__2023-08-30T06:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*09:11 Airflow alert: <TaskInstance: projectview_geo.move_data_to_archive scheduled__2023-08-30T07:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*10:02 Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-30T08:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*10:36 Airflow alert: <TaskInstance: druid_load_pageviews_hourly.remove_temporary_directory scheduled__2023-08-30T08:00:00+00:00 [failed]> Exception: SkeinHook druid_load_pageviews_hourly__remove_temporary_directory__20230830 application_1692895131960_29339
+*12:14 Meeting to diagnose exact cause
+*12:26 Test fix for log compression algorithm
+*13:06 Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-30T11:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*13:48 [[gerrit:c/operations/puppet/+/953599|Fix hadoop-yarn log aggregation compression]] patch submitted.
+*14:02 Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-30T12:00:00+00:00 [failed]> 'No logs found. Log aggregation may have not completed, or it may not be enabled.'
+*14:08 restart hadoop-yarn-nodemanager.service on an-worker10[78-99].eqiad.wmnet in batches of 2 with 3 minutes in between
+*14:46 restart hadoop-yarn-nodemanager.service on an-worker11[00-28].eqiad.wmnet in batches of 2 with 3 minutes in between
+*15:43 restart hadoop-yarn-nodemanager.service on an-worker11[29-48].eqiad.wmnet in batches of 2 with 3 minutes in between
+*16:22 All restarts complete and the whole cluster is now using the right compression-type.
+<!-- Reminder: No private information on this page! -->
+
+==Detection==
+Automated email alerts from Airflow
+
+Log aggregation alerts similar to:<syntaxhighlight lang="text">
+[Data-engineering-alerts] Airflow alert: <TaskInstance: projectview_hourly.move_data_to_archive scheduled__2023-08-29T13:00:00+00:00 [failed]>
+
+Try 1 out of 1
+
+Exception:
+
+No logs found. Log aggregation may have not completed, or it may not be enabled.
+
+Log: Link
+
+Host: an-launcher1002.eqiad.wmnet
+
+Mark success: Link
+</syntaxhighlight>Remove temp directory Alert<syntaxhighlight lang="text">
+[Data-engineering-alerts] Airflow alert: <TaskInstance: druid_load_webrequest_sampled_128_daily.remove_temporary_directory scheduled__2023-08-29T00:00:00+00:00 [failed]>
+
+Try 6 out of 6
+Exception:
+SkeinHook druid_load_webrequest_sampled_128_daily__remove_temporary_directory__20230829 application_1692895131960_27376
+Log: Link
+Host: an-launcher1002.eqiad.wmnet
+Mark success: Link
+</syntaxhighlight>
+
+
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+* We need to test config changes on the Hadoop test cluster first before merging.
+* We need to remember to restart the services after a verified config change commit
+
+===What went well?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* Define an alert if the yarn config file modification time is newer than the service start time by more than 24 hours
+** Apply this new alert pattern to other (HDFS, Namenode etc)
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

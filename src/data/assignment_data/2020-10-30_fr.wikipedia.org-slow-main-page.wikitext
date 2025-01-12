@@ -1,0 +1,41 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+The [https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal main page of the French Wikipedia] was loading much slower than usual for some time on October 30th 2020. The page did load but took several seconds and up to 20 seconds to finish.
+
+The incident lasted roughly 7 hours and the group of affected users were all logged in users using the main page of French Wikipedia during that time. Logged out users / general readers were served cached results and did not notice the incident. We can roughly estimate the number of affected users to about ~ 625, based on about 2500 unique editors per day.
+
+The ones who did notice started reporting on the [https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Le_Bistro#Temps_de_chargement_de_la_page_d'accueil French Wikipedia Bistro page] and a [https://phabricator.wikimedia.org/T266865 ticket on phabricator] was created.
+
+The FeaturedFeeds extension adds Atom feed <code><link></code> tags to the head of main pages, but internally it generates the entire feed, just to add the tags. Normally it reads from the cache so this wasn't noticed until the feed became too big to fit in memcached (<code>ITEM_TOO_BIG</code> error) and was being generated/parsed on every main page load, including <code>action=history</code> or <code>action=edit</code>.
+
+The issue was resolved after the '''[https://noc.wikimedia.org/conf/highlight.php?file=FeaturedFeedsWMF.php wmgFeaturedFeedsOverrides]''' limit used by the [https://www.mediawiki.org/wiki/Extension:FeaturedFeeds FeaturedFeeds extension]was [https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/637752 reduced from 60 items per feed to the default of 10 items per feed] that is used by other wikis.
+
+This did not change rendering of the main page; the only lasting effect will be that users of [https://fr.planet.wikimedia.org fr.planet.wikimedia.org], the RSS feed aggregator for Wikimedia-related feeds, will see only 10 instead of 60 items from the fr.wikipedia featured feed.
+
+The feed config and special case for frwiki had been added as part of {{phab|T167617}} back in 2017.
+
+An additional mini report can be found in [[phab:T266865#6592372|T266865#6592372]].
+
+== Timeline ==
+
+* 12:22 UTC https://phabricator.wikimedia.org/T266865 is opened
+* ~ 17:40 UTC SRE starts investigating
+* 17:51 SRE confirms issue on ticket and notes it is not limited to esams but affects all data centers but only the French main page and not other pages
+* 18:22 UTC SRE finds “Memcached error for key "WANCache:frwiki:featured-feeds:1:fr|#|v" on server "127.0.0.1:11213": ITEM TOO BIG”
+* 18:27 UTC SRE reaches out to perf-team
+* 18:35 UTC SRE finds that MW config has wmgFeaturedFeedsOverrides with a limit set to “60” for frwiki while other wikis use defaults
+* 18:36 UTC volunteer suggests disabling featuredfeeds extension and testing on mwdebug1001 and does so. Confirms load time is much faster without it.
+* 18:39 UTC SRE uploads config change to [https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/637752 remove the custom limit of 60 items per feed].
+* 18:50 Deployment of said patch
+* 18:56 French WP user confirms issue looks resolved. (https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Le_Bistro#Temps_de_chargement_de_la_page_d'accueil)
+This incident also happened again on [[phab:T270631|2020-12-21]].
+
+== Actionables ==
+* [[gerrit:c/operations/mediawiki-config/+/637752|reduce number of feed items from 60 to default]] (done)
+* {{phab|T266900}}: FeaturedFeeds should not load all feed content just to output the feed URLs on the main page (done)

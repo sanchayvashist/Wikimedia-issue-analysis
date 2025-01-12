@@ -1,0 +1,51 @@
+{{irdoc|status=review}}
+
+== Summary ==
+On Sunday 5th at 11:22UTC, the primary hard drive of cr3-eqsin (one of the two Singapore POP routers) crashed.
+This caused the router to reboot into its second disk, containing only a factory default configuration. Everything failed over cleanly to the redundant router.
+
+'''Impact''': We lost at max ~15000 requests/s in a 7min window (see screenshot, and [https://grafana.wikimedia.org/d/000000479/frontend-traffic?panelId=2&fullscreen&orgId=1&from=1593943200000&to=1593953999000&var-site=eqsin&var-cache_type=text&var-cache_type=upload&var-status_type=1&var-status_type=2&var-status_type=3&var-status_type=4 graph]).
+[[File:Screenshot 2020-07-07 Frontend Traffic - Grafana.png|thumb|Impact of cr3-eqsin crash on eqsin traffic]]
+{{TOC|align=right}}
+
+== Timeline ==
+'''All times in UTC.'''
+
+* 11:22 PROBLEM - Host cr3-eqsin is DOWN: PING CRITICAL - Packet loss = 100% (paging) '''OUTAGE BEGINS'''
+* 11:25 SREs reports of connectivity issues to eqsin (too brief to trigger alerting)
+* 11:27 Routing is done converging, no more reports of connectivity issue '''OUTAGE ENDS'''
+* 11:35 DNS patch ready to depool eqsin (just in case, unused) - https://gerrit.wikimedia.org/r/c/operations/dns/+/609571/
+
+Monday 06
+* ~07:40 Router is brought back up on its backup disk '''Redundancy restored'''
+
+== Detection ==
+
+* Was automated monitoring first to detect it? Yes
+* Did the appropriate alert(s) fire? Yes
+* PROBLEM - Host cr3-eqsin is DOWN: PING CRITICAL - Packet loss = 100% (paging alert)
+* Was the alert volume manageable? Yes, only relevant alerts fired
+* Did they point to the problem with as much accuracy as possible? Yes, the router went down, and only the router down paging alert triggered
+
+== Conclusions ==
+* This outage showed that our hardware redundancy and failover are solid
+* Juniper recently introduced a new feature: <code>vmhost snapshot</code> that would have prevented the lack of redundancy (but not the crash itself)
+
+=== What went well? ===
+* Everything failed over as expected to the redundant router
+
+=== What went poorly? ===
+* N/A
+
+=== Where did we get lucky? ===
+* N/A
+
+=== How many people were involved in the remediation? ===
+* 2 SREs investigating the issue, multiple SREs reported present to the page
+
+== Links to relevant documentation ==
+https://wikitech.wikimedia.org/wiki/Network_monitoring#host_(ipv6)_down
+
+== Actionables ==
+* cr3-eqsin disk 1 failure - https://phabricator.wikimedia.org/T257154
+* Investigate Junos vmhost snapshot - https://phabricator.wikimedia.org/T257153

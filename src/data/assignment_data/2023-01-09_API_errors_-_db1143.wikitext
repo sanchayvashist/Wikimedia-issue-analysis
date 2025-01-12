@@ -1,0 +1,177 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T326590
+| paged-num = 2
+| responders-num = 4
+| coordinators = dzahn
+| start = 2023-01-09 21:04:00
+| end = 2023-01-09 21:14:00
+| metrics = API appservers
+| impact = elevated 5xx, API errors, wbsgetsuggestions failed to return suggestions on Wikidata
+}}
+
+<!-- Reminder: No private information on this page! -->
+
+== Effect for users ==
+* We served elevated 5xx to end users for about 10 minutes, between 21:04 and 21:14
+* Wikidata users noticed they could not get suggestions anymore and created T326590
+
+== Probable cause / chain of events == 
+# Someone edited a page or refreshlinks on any of the wikis.
+# This triggers public static function onLinksUpdateComplete which tries to see if a commons file usage has changed.
+# A database server in cluster S4 which hosts commons, gets overloaded with 300 queries that are not slow individually but overwhelm the system.
+# Hundreds of queries of the type <code>SELECT * MediaWiki\Extension\GlobalUsage\GlobalUsage::getLinksFromPage ...</code> are created.
+# The number of queries on s1 (en.wp) drops.
+# The affected server db1143 gets depooled, things recover almost instantly.
+# A massive spike of reads happens on the s1 database cluster, which hosts en.wikipedia, due to the recovery.
+# A spike of POST traffic to Parsoid happened after after api-appserver recovered, which then saturated parsoid.
+{{TOC|align=right}}
+
+== Graphs ==
+5xx spike on appservers
+<gallery>
+2023-01-09 13-42-34-5xx-errors-appservers.png|5xx errors on appservers
+2023-01-09 14-56-15-mysql-global-status-handlers.png|mysql spikes
+2023-01-09 14-56-33-appservers-RED-dashboard.png|appservers RED dashboard
+2023-01-09 14-56-50-appservers-RED-dashboard.png|appservers RED dashboard
+2023-01-09 14-58-09-victorops.png|events in alerting dashboard
+</gallery>
+
+
+
+==Timeline==
+21:02 - first alerts show up on IRC, bot notifies about 'High average GET latency on API appservers'
+
+21:02 - an alerting page was sent for "ProbeDown (ip4_api-https) (3215)". It was ACKed within the same minute (46241)
+
+21:03 - an alerting page was sent for: "PHPFPMTOOBusy api_appserver (3216)"
+
+21:04 - An incident was opened.  '''dzahn''' becomes IC.
+
+21:07 - dzahn sends manual page to SRE via Klaxon to ask for help.
+
+21:09 - DBA marostegui joins and immediately identifies db1143 as non-response, depools it from service
+
+21:10 - A shower of recoveries starts almost instantly, traffic recovers.
+
+21:10 - https://phabricator.wikimedia.org/T326590 is created by users noticing broken suggestions service on Wikidata.
+
+21:12 - recovery page is sent for event 3215
+
+21:13 - recovery page is sent for event 3216
+
+21:17 - recovery page is sent for event 3218 *ipv4 probes prometheus eqiad*, api-https has failed probes
+
+21:18 - recovery page is sent for event 3219, *PHPFPMTooBusy parsoid*
+
+21:24 - recovery page is sent for event 3220 *MariaDB Replica Lag: s4*
+
+==Detection==
+alerting via icinga/alertmanager/victorops - SMS was sent to SREs on on-call duty shift. manual escalation via Klaxon to more SREs.
+
+==Conclusions ==
+
+Maybe onLinksUpdateComplete should not always lok for commons file usage changes or have some throttle.
+
+===What went well?===
+
+* alerting worked, reaction time was fast
+* DBA was available and able to identify and depool the relevant server quickly which almost instantly solved the issue
+
+===What went poorly?===
+
+* We got more recovery pages than original alert pages or at least some of us and we are not sure why.
+
+===Where did we get lucky?===
+
+* That this doesn't happen more often.
+
+==Links to relevant documentation==
+
+* [[Dbctl#Completely depool a host]]
+
+==Actionables==
+
+* Ticket for MediaWiki? - possibly https://phabricator.wikimedia.org/T314020?
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|2 on-callers but they escalated to SRE via klaxon
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|but the incident just lasted ~10 minutes, so that was ok
+|-
+| Was a public wikimediastatus.net entry created? 
+|yes
+|but only retroactively. we did not know if it was an attack at first
+|-
+|Is there a phabricator task for the incident?
+|yes
+|kind of, https://phabricator.wikimedia.org/T326590 was created and was caused by it but is about one specific effect of it and user created
+|-
+|Are the documented action items assigned?
+|n/a
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|There might be a ticket about onLinksUpdateComplete but this needs input from mw developers.
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|it was using dbctl, not sure if "db server is overloaded -> depool" counts as runbook
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,37 @@
+
+
+==Summary==
+
+For approximately 12 minutes some internal services (e.g. Bacula and Etherpad) were not available or operated at reduced capacity. This was caused by a faulty memory stick leading to a reboot of db1128, which was at the time the primary host of the m1 database section.
+
+Documentation:
+*Full list of potentially affected services
+
+==Actionables==
+*Failover m1 primary db from db1128 to db1164
+*db1128 faulty memory
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	yes	
+Process                                       	Was the incident status section actively updated during the incident?                                             	no 	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were all engineering tools required available and in service?                                                     	yes	
+Tooling                                       	Was there a runbook for all known issues present?                                                                 	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	7  	

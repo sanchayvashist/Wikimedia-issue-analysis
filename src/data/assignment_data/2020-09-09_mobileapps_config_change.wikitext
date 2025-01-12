@@ -1,0 +1,15 @@
+{{irdoc|status=review}}
+== Summary ==
+While reconfiguring all services to use our service proxy middleware to make remote procedure calls, a faulty configuration was deployed by [[User:Giuseppe Lavagetto|yours truly]] for mobileapps at 08:40. This caused mobileapps to create mobile-html content with broken css and js links for pages regenerated during the day.
+
+The issue was reported at 16:40 and the issue was quickly reverted. Then we needed a few hours to actually clear all the caching layers (RESTBase, edge caches). All pages affected were purged by 20:20.
+
+== Actionables ==
+
+* https://phabricator.wikimedia.org/T268484 Tracking task.
+* https://phabricator.wikimedia.org/T262437 The bug caused by this incident (Page content service is deployed with localhost links).
+* https://phabricator.wikimedia.org/T264340 Create test for api/rest_v1/page/mobile-html
+
+* The biggest actionable is of course to always wait for validation from service owners before merging a patch - and the whole outage would've been avoided if that was done. Anything else listed here is purely a second-order actionable.
+* While this deployment was the result of bad judgement, SRE need to be able to deploy a configuration change with confidence. The fact that the mobileapps spec tests all passed in staging lulled SRE into a false sense of security. The OpenAPI spec should be extended to include a test for the aforementioned URLs. '''(TODO: create task)'''
+* We need staging to become a functional environment where we can test more than just a swagger spec test. Maybe linking it to restbase-dev, and making it possible to compare results of urls with production would help '''(TODO: create task)'''

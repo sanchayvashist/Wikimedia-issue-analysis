@@ -1,0 +1,44 @@
+
+
+==Summary==
+
+A particular banner was deployed via CentralNotice that was both enabled for all users and with 100% sampling rate for its event instrumentation.
+
+This caused instabilities at the outer traffic layer. The large amount of incoming traffic for event beacons, each of which had to be handed off to a backend service (eventgate-analytics-external), resulted in connections piling up and Varnish was unable to handle it and other traffic as a result, thus causing wikis to be unreachable in the affected regions. Initially Esams datacenter clients (mostly Europe, Africa and Middle East), with some temporary issues on other datacenters (Eqiad) as well when we initially attempted to reroute traffic to there.
+
+
+
+Documentation:
+*Varnish traffic 08:00-12:00 (Grafana)
+*Frontend traffic 2xx responses (Grafana)
+*navtiming pageview sampling (Grafana)
+*https://www.wikimediastatus.net/incidents/rhn1l6k33ynz
+*Restricted documented
+
+==Actionables==
+
+*  Avoid flood of CN banner analytics
+*  Set a maximum for configurable sample rate of CentralNotice events that use EventGate
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	1    	
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	0    	
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	0    	
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	1    	
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	1    	
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	1    	
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	1    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	0    	
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	0    	
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	1    	
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	1    	
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	1    	
+Total score	Total score                                                                                                                                              	11   	

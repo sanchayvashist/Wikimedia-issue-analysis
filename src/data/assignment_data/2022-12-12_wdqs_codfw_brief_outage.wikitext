@@ -1,0 +1,163 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = 3
+| responders-num = 1
+| coordinators = 1
+| start = 2022-12-12 20:14:17
+| end = 2022-12-12 20:30:00
+| metrics = WDQS Uptime SLO
+| impact = For about 15 minutes, wdqs queries routed to codfw failed
+}}
+
+
+A large influx in requests led to excessive thread pool usage from codfw blazegraph backends, with concomitant increases in CPU load and throttling filter state size. This triggered a known bug in Blazegraph where its improper thread management leads to deadlock.
+
+The system self healed, perhaps due to application-level throttling state throttling the offender.
+
+Most or all CODFW-routed wdqs requests during the incident window failed.
+
+{{TOC|align=right}}
+
+==Timeline==
+'''Beginning of incident'''
+
+'''2022-12-12 20:13:18''' <+jinxer-wm> (ProbeDown) firing: Service wdqs-ssl:443 has failed probes (http_wdqs-ssl_ip4) #page - https://wikitech.wikimedia.org/wiki/Runbook#wdqs-ssl:443 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+
+'''2022-12-12 20:13:18''' <+jinxer-wm> (ProbeDown) firing: Service wdqs-ssl:443 has failed probes (http_wdqs-ssl_ip4) - https://wikitech.wikimedia.org/wiki/Runbook#wdqs-ssl:443 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+
+'''2022-12-12 20:14:17''' <+icinga-wm> PROBLEM - PyBal backends health check on lvs2009 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs2004.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs-ssl_443: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs2004.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs_80: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs20
+
+'''2022-12-12 20:14:17''' <+icinga-wm> .wmnet, wdqs2002.codfw.wmnet are marked down but pooled https://wikitech.wikimedia.org/wiki/PyBal
+
+'''2022-12-12 20:14:17''' <+icinga-wm> PROBLEM - WDQS SPARQL on wdqs2001 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Wikidata_query_service/Runbook
+
+'''2022-12-12 20:14:17''' <+icinga-wm> PROBLEM - WDQS SPARQL on wdqs2003 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Wikidata_query_service/Runbook
+
+'''2022-12-12 20:25:00''' Rough end of incident (end of user impact)
+
+'''2022-12-12 20:31:00''' [WDQS] <code>ryankemper@cumin2002:~$ sudo -E cumin -b 4 wdqs2* 'systemctl restart wdqs-blazegraph'</code> By this point, the service had already recovered, but was restarted out of an abundance of caution.
+
+==Detection==
+
+The issue was rapidly detected by pybal monitoring of WDQS. A page was emitted by the monitoring system fairly quickly.
+
+'''2022-12-12 20:13:18''' <+jinxer-wm> (ProbeDown) firing: Service wdqs-ssl:443 has failed probes (http_wdqs-ssl_ip4) #page - https://wikitech.wikimedia.org/wiki/Runbook#wdqs-ssl:443 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+
+'''2022-12-12 20:13:18''' <+jinxer-wm> (ProbeDown) firing: Service wdqs-ssl:443 has failed probes (http_wdqs-ssl_ip4) - https://wikitech.wikimedia.org/wiki/Runbook#wdqs-ssl:443 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+
+'''2022-12-12 20:14:17''' <+icinga-wm> PROBLEM - PyBal backends health check on lvs2009 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs2004.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs-ssl_443: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs2004.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs_80: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs20
+
+'''2022-12-12 20:14:17''' <+icinga-wm> .wmnet, wdqs2002.codfw.wmnet are marked down but pooled https://wikitech.wikimedia.org/wiki/PyBal
+
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* The [https://grafana.wikimedia.org/d/000000489/wikidata-query-service?orgId=1&var-cluster_name=wdqs&from=1670875248301&to=1670877655595| wdqs codfw dashboard] shows a large spike in queries for wdqs2*, with a corresponding increase in CPU load and the throttling filter state.
+
+==Actionables==
+
+{{phab|T325324}}
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|
+|
+|-
+| Was the public status page updated? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,155 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T323920
+| paged-num = unknown
+| responders-num = 5
+| coordinators = Adam Wight
+| start = 2023-01-30 12:46:00
+| end = 2023-01-30 13:31:00
+| metrics = Maps performance: https://grafana.wikimedia.org/goto/t9kVNV04z?orgId=1
+| impact = No maps were rendered during the outage.
+}}
+
+An upgrade to Kartotherian caused spurious Icinga alerts so was rolled back.  Rollback fails and the service goes down, due to non-robustness in the deployment configuration templates.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+* 12:21 Update kartotherian service to [kartotherian/deploy@42a07d3] on the Beta Cluster.  The build is smoke-tested and is healthy.
+* 12:25 Deploy to production [kartotherian/deploy@42a07d3]: Disable traffic mirroring from codfw to eqiad (duration: 02m 44s).  The service remains functional.
+* 12:27 Icinga begins alerting about "kartotherian endpoints health", with nonsense template variables in the URLs like "/{src}/info.json"
+* 12:46 Attempt to roll back kartotherian. Finished deploy [kartotherian/deploy@5c58f8f]: Roll back kartotherian (duration: 01m 27s).  However, the service fails to restart, and we start looking for an explanation.
+* 12:46 '''OUTAGE BEGINS'''
+* 13:16 We learn that kartotherian configuration is broken only if deploying without the "--env" flag, now {{PhabT|328406}}.
+* 13:31 Finished deploy [kartotherian/deploy@5c58f8f] (codfw and eqiad).  Kartotherian is successfully rolled back everywhere.
+* 13:31 '''OUTAGE ENDS'''
+[[File:Maps service errors 2023-01-30.png|none|frame]]
+
+==Detection==
+Icinga alerts for "kartotherian endpoints health" in #wikimedia-operations began to fire, for example:
+ 13:27 <+icinga-wm> PROBLEM - kartotherian endpoints health on maps2006 is CRITICAL: /{src}/{z}/{x}/{y}.{format} (Untitled test) is CRITICAL: Test Untitled test returned the 
+                    unexpected status 301 (expecting: 200): /{src}/{z}/{x}/{y}@{scale}x.{format} (Untitled test) is CRITICAL: Test Untitled test returned the unexpected 
+                    status 404 (expecting: 200): /{src}/info.json (Untitled test) is CRITICAL: Test Untitled test returned the unexpected status 404 (expecting
+
+User claime correctly guessed that the alerts were related to awight's deployment and pinged them in IRC.
+
+We learned later that these alerts were spurious, caused by an automatically-generated monitoring job ({{PhabT|328437}}).
+
+When rollback failed, we monitored full service failure through its dedicated dashboard, https://grafana.wikimedia.org/d/000000305/maps-performances.
+==Conclusions ==
+A more robust or fully automated and containerized deployment for the maps service would have prevented an outage.
+
+===What went well?===
+
+* WMF SRE and maps developers jumped in quickly to help diagnose and fix the issue.
+
+===What went poorly?===
+
+* Maps deployment needs better documentation.
+* Maps deployment is not very robust.  It's possible to deploy without updating the kartotherian-deploy/src submodule for example.  Configuration templates should not be so fragile, we could lint during CI.
+* The scap tool broke in the middle of this incident, for all MediaWiki deploys, with no record of how it was broken in the SAL.  We got lucky that the person causing this side breakage was responsive in IRC and quickly fixed the issue.
+* Maps deployment repo is difficult to build and merge, which caused wasted time and lack of confidence.
+
+===Where did we get lucky?===
+
+* SRE and devs were available and responsive.
+* One specific dev with maps knowledge was able to find an obscure issue and restore the service.
+
+==Links to relevant documentation==
+
+* [[Maps/Services deployment]]
+*https://grafana.wikimedia.org/d/000000305/maps-performances
+*https://github.com/wikimedia/operations-software-service-checker
+*[[Server Admin Log/Archive 62]]
+
+==Actionables==
+
+* Improve documentation for maps production deployment.
+* {{Done}} Fix Icinga monitoring for maps, {{PhabT|328437}}
+* Make kartotherian configuration robust enough to deploy without the "--env" flag, {{PhabT|328406}}
+* Improve documentation about how the OpenAPI specification is automatically wired into CI and monitoring, {{PhabT|328524}}.
+* Containerize the kartotherian service, {{PhabT|198901}}
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,14 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+At 9:21, ms-be1062 had a crash in its network stack (tracked at [https://phabricator.wikimedia.org/T281107 T281107]) which caused the server to blackhole traffic. This caused a lot of requests to swift to reach timeouts, causing the consequent starvation of resources for the thumbor cluster workers, which were mostly waiting for a response from swift. This happened during a rebalance operation of the swift cluster, which we've seen in the past can impose quite some stress on the swift backend in our current configuration. Traffic was diverted to the codfw cluster for generating thumbnails at 09:26, thus minimizing impact for users. Rebooting ms-be1062 at 9:38 solved the issue instantly.
+
+== Actionables ==
+
+* Understand why pybal would not depool any of the backends even if they were returning 503s even to monitoring (TODO: Create task)
+* Track down the kernel bug that caused ms-be1062 to blackhole traffic. It’s also worrisome that a swift cluster would become unresponsive in such a situation.  https://phabricator.wikimedia.org/T281107

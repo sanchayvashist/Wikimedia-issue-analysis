@@ -1,0 +1,101 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = 20
+| responders-num = 4
+| coordinators = Filippo
+| start = 2022-06-10 14:57
+| end = 2022-06-10 15:00
+| impact = For 3 minutes wiki traffic was disrupted in multiple regions at the CDN layer, affecting both cached and logged-in responses with HTTP 5xx error responses.
+}}
+
+Lots of HTTP 429 from Varnish (due to ongoing rate-limiting) caused overload at the [[HAProxy]] level and general service disruption.
+
+'''Documentation''':
+*HTTP 503s reported on phab https://phabricator.wikimedia.org/T310368
+*https://www.wikimediastatus.net/incidents/5k90l09x2p6k
+
+==Actionables==
+*(Re) evaluate effectiveness / usefulness of varnish/haproxy traffic drop alerts https://phabricator.wikimedia.org/T310608
+*Mitigate/fix overload situations between varnish and haproxy https://phabricator.wikimedia.org/T310609
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|
+|
+|-
+|Was the public status page updated?
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were all engineering tools required available and in service?
+|
+|
+|-
+|Was there a runbook for all known issues present?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

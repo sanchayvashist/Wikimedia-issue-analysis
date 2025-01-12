@@ -1,0 +1,123 @@
+{{irdoc|status=final}}
+==Summary==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+{| class="wikitable"
+|'''Incident ID''' 
+|2021-11-10 cirrussearch commonsfile outage
+|'''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+|https://phabricator.wikimedia.org/T299967 
+|'''UTC End Timestamp'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged'''
+|<amount of people> 
+|'''Responder Count'''
+| <amount of people>
+|-
+|'''Coordinator(s)'''
+|Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget 
+|-
+|'''Impact:'''
+| colspan="3" |For about 2.5 hours (14:00-16:32 UTC), the Search results page was unavailable on many wikis (except for English Wikipedia). On Wikimedia Commons the search suggestions feature was unresponsive as well. 
+|}On 10 November, as part of verifying a bug report, a developer submitted a high volume of search queries against the active production Cirrus cluster (eqiad cirrussearch) via a tunnel from their local mw-vagrant environment. <code>vagrant provision</code> was (probably) later run without the tunnel being properly closed first, which resulted in (for reasons not yet understood) the deletion and recreation of the <code>commonswiki_file_1623767607</code> index.
+
+As a direct consequence, any Elasticsearch queries that targetted media files from commonswiki encountered a hard failure.
+
+During the incident, all media searches on Wikimedia Commons failed. Wikipedia projects were impacted as well,<ref>[https://logstash.wikimedia.org/goto/73a9d7e35f409c0d122888d42df94761 Log events of all affected requests] ('''note''': requires [[Logstash]] access)</ref> through the "cross-wiki" feature of the sidebar on Search results pages. This cross-wiki feature is enabled on most wikis by default, though notably not on English Wikipedia where the community disabled search integration to Commons.
+
+Note that the search suggestions feature, as present on all article pages was not affected (except on Wikimedia Commons itself). The search suggestions field is how how most searches are performed on Wikipedia, and was not impacted. Rather, it impacted the dedicated Search results page ("Special:Search", which consistently failed to return results on wikis where the rendering of that page includes a sidebar with results from Wikimedia Commons.
+
+=== Timeline ===
+
+* '''15:21''' First ticket filed by impacted user https://phabricator.wikimedia.org/T295478
+* '''15:28''' Additional, largely duplicate ticket filed by user https://phabricator.wikimedia.org/T295480
+* '''15:32''' <code><Dylsss> Searching for files on Commons is currently impossible, I believe this is quite critical given the whole point of Commons is being a file repository </code>
+* '''15:52''' Initial attempt to shift cirrussearch traffic to codfw (did not work due to missing a required line in patch) (https://sal.toolforge.org/log/05mNCn0B1jz_IcWuO9iw)
+* '''16:32''' Search team operator successfully moves all cirrussearch traffic to codfw, resolving user impact (https://sal.toolforge.org/log/8p2xCn0Ba_6PSCT9sorW)
+* '''???''' Index successfully restored, and traffic is returned to eqiad
+
+=== References: ===
+<references />
+=Scorecard=
+{| class="wikitable"
+!
+!Question 
+!Score 
+!Notes
+|-
+! rowspan="5" |People
+| Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|NA
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no) 
+|0
+|NA
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|No pages logged, issue reported via task
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|0
+|No pages logged
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no) 
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+| Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|0
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|4
+|
+|}
+== Actionables ==
+
+* Future one-off debugging of the sort that triggered this incident, when it requires production data, should be done on <code>cloudelastic</code>, which is an up-to-date read-only Elasticsearch cluster. If production data is needed but <= 1 week stale data is acceptable, <code>relforge</code> should be used instead.

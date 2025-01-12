@@ -1,0 +1,210 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T358636
+| paged-num = 15
+| responders-num = 2
+| coordinators = 1
+| start = 2024-02-28 01:39
+| end = 2024-02-28 02:52
+| metrics = None. Each of the two etcd clusters was healthy, so the etcd SLO was unaffected. Replication is not covered by an SLO.
+| impact = No user impact. Near miss for split brain config scenarios, as described below.
+}}
+
+[[Conftool]] data, stored in [[etcd]], is normally replicated from one data center to the other (currently eqiad to codfw) using an in-house tool called [https://gerrit.wikimedia.org/r/plugins/gitiles/operations/software/etcd-mirror/+/refs/heads/master/etcdmirror etcd-mirror]. Etcd-mirror is intentionally fairly brittle to replication problems; when it encounters an unexpected situation, it stops replicating and pages us, rather than attempt to self-recover and risk corrupting the etcd state.
+
+Due to an unusual sequence of data changes (detailed below) etcd-mirror's long-running watch lost track of the up-to-date state of etcd in eqiad, and replication stopped. This had no immediate user impact, but subsequent conftool changes (like pooling/depooling hosts in load-balanced clusters, pooling/depooling data centers in service discovery, or requestctl changes) would not have been propagated between data centers, leaving us without emergency tools and potentially causing a dangerous skew in production config.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+''All times in UTC.''
+*00:00 Last conftool etcd event is successfully replicated from eqiad to codfw through etcd-mirror. (The midnight UTC timestamp is a coincidence.)
+
+ Feb 28 00:00:26 conf2005 etcdmirror-conftool-eqiad-wmnet[2619978]: [etcd-mirror] INFO: Replicating key /conftool/v1/request-ipblocks/cloud/linode at index 3020127
+
+*00:00-01:39 An unusual number of reimage and other cookbooks are run (acquiring and releasing locks in etcd), and there are no changes to conftool data. Unusually, this produces 1,000 consecutive ''non''-conftool etcd events.
+
+*01:39 etcd-mirror fails:
+
+ Feb 28 01:39:44 conf2005 etcdmirror-conftool-eqiad-wmnet[2619978]: CRITICAL: The current replication index is not available anymore in the etcd source cluster.
+ Feb 28 01:39:44 conf2005 etcdmirror-conftool-eqiad-wmnet[2619978]: [etcd-mirror] CRITICAL: The current replication index is not available anymore in the etcd source cluster.
+ Feb 28 01:39:44 conf2005 etcdmirror-conftool-eqiad-wmnet[2619978]: [etcd-mirror] INFO: Restart the process with --reload instead.
+ Feb 28 01:39:46 conf2005 systemd[1]: etcdmirror-conftool-eqiad-wmnet.service: Main process exited, code=exited, status=1/FAILURE
+
+*01:42 Alerts fire:
+
+ 01:42:41 <jinxer-wm> (EtcdReplicationDown) firing: etcd replication down on conf2005:8000 #page - https://wikitech.wikimedia.org/wiki/Etcd/Main_cluster#Replication - TODO - https://alerts.wikimedia.org/?q=alertname%3DEtcdReplicationDown
+ 01:45:25 <jinxer-wm> (SystemdUnitFailed) firing: etcdmirror-conftool-eqiad-wmnet.service on conf2005:9100 - https://wikitech.wikimedia.org/wiki/Monitoring/check_systemd_state - https://grafana.wikimedia.org/d/g-AaZRFWk/systemd-status - https://alerts.wikimedia.org/?q=alertname%3DSystemdUnitFailed
+
+*01:46 rzl and swfrench consider restarting with <code>--reload</code> as indicated but decide to investigate first.
+
+*02:03 swfrench curls https://<nowiki/>conf2005.codfw.wmnet:4001/v2/keys/__replication and gets a value matching the last successful read at 00:00:26:
+
+ {
+     "action": "get",
+     "node": {
+         "key": "/__replication",
+         "dir": true,
+         "nodes": [
+             {
+                 "key": "/__replication/conftool",
+                 "value": "3020127",
+                 "modifiedIndex": 5150719,
+                 "createdIndex": 4271
+             }
+         ],
+         "modifiedIndex": 2140,
+         "createdIndex": 2140
+     }
+ }
+
+*02:06 rzl and swfrench consider whether to try restarting etcd-mirror ''without'' <code>--reload</code>, in case the error is trivially recoverable; as we're talking about it, the unit restarts itself and fails with the same error. This causes some confusion before we simply note that it didn't work and move on. (We thought it might have been someone participating in the incident response without speaking up on IRC; it was just Puppet happening to run at the instant we were talking about it.)
+
+ Feb 28 02:07:22 conf2005 systemd[1]: Started Etcd mirrormaker.
+ Feb 28 02:07:23 conf2005 etcdmirror-conftool-eqiad-wmnet[3349905]: [etcd-mirror] INFO: Current index read from /__replication/conftool
+ Feb 28 02:07:23 conf2005 etcdmirror-conftool-eqiad-wmnet[3349905]: [etcd-mirror] INFO: Starting replication at 3020127
+ Feb 28 02:07:23 conf2005 etcdmirror-conftool-eqiad-wmnet[3349905]: CRITICAL: The current replication index is not available anymore in the etcd source cluster.
+ Feb 28 02:07:23 conf2005 etcdmirror-conftool-eqiad-wmnet[3349905]: [etcd-mirror] CRITICAL: The current replication index is not available anymore in the etcd source cluster.
+ Feb 28 02:07:23 conf2005 etcdmirror-conftool-eqiad-wmnet[3349905]: [etcd-mirror] INFO: Restart the process with --reload instead.
+ Feb 28 02:07:23 conf2005 systemd[1]: etcdmirror-conftool-eqiad-wmnet.service: Main process exited, code=exited, status=1/FAILURE
+
+*02:16 We track down the "replication index is not available" error message in [https://gerrit.wikimedia.org/r/plugins/gitiles/operations/software/etcd-mirror/+/b5823aa025b8555738f8fbe409e0e6c000e1985c/etcdmirror/main.py#186 the etcd-mirror source], and identify it as an EtcdEventIndexCleared exception. swfrench conjectures that we might be seeing the situation described at the bottom of https://etcd.io/docs/v2.3/api/#waiting-for-a-change ("Note: etcd only keeps the responses of the most recent 1000 events across all etcd keys.") in which case the correct recovery is to get and then watch, to recover the missing events, as described in the next section, https://etcd.io/docs/v2.3/api/#watch-from-cleared-event-index. etcd-mirror does not support this.
+
+*02:21 swfrench confirms with <code>curl -v 'https://<nowiki/>conf1009.eqiad.wmnet:4001/v2/keys/conftool?wait=true&waitIndex=3020127'</code> that that's the problem: X-Etcd-Index is just over 1,000 events ahead of the wait index. That would indicate there were more than 1,000 events outside the /conftool keyspace -- such as locks for Spicerack -- without any events under /conftool. Since this was an unusually busy day for reimage cookbooks, with Spicerack locks newly added in [[phab:T341973|T341973]], this is both a new failure mode and a complete explanation of the root cause and trigger.
+
+*02:25 swfrench considers manually advancing /__replication/conftool in codfw by 999. This would advance the replication index until just prior to the end of the "safe" 1,000-event window where we knew there were no conftool events, which also happened to be well within the 1,000-event retention window bounded by the then-current etcd index in eqiad (3021261). (Advancing it beyond the safe window could skip events that should have been replicated, potentially leading to a dangerous split-brain condition.) The alternative would be restarting etcd-mirror with <code>--reload</code>, which obliterates the state of etcd in the replicated cluster before recreating it, something which has [[Incidents/2022-09-08_codfw_appservers_degradation|aggravated incidents in the past]]; in this case a successful <code>--reload</code> should be safe, but if it hit a snag, we were uncertain of being able to recover quickly with the staff available.
+
+*02:40 We decide to proceed with manually advancing the index, on the theory that if it doesn't work we can always proceed with an etcd-mirror reload; even if it ''does'' work, we can always follow up with a reload during working hours to ensure a clean state.
+
+*02:50 swfrench runs <code>curl https://<nowiki/>conf2005.codfw.wmnet:2379/v2/keys/__replication/conftool -XPUT -d "value=3021126"</code> on conf2005.
+
+*02:52 swfrench restarts etcd-mirror, which resumes normally.
+
+*02:55 Alerts recover:
+
+ 02:55:25 <jinxer-wm> (SystemdUnitFailed) resolved: etcdmirror-conftool-eqiad-wmnet.service on conf2005:9100 - https://wikitech.wikimedia.org/wiki/Monitoring/check_systemd_state - https://grafana.wikimedia.org/d/g-AaZRFWk/systemd-status - https://alerts.wikimedia.org/?q=alertname%3DSystemdUnitFailed
+ 02:57:41 <jinxer-wm> (EtcdReplicationDown) resolved: etcd replication down on conf2005:8000 #page - https://wikitech.wikimedia.org/wiki/Etcd/Main_cluster#Replication - TODO - https://alerts.wikimedia.org/?q=alertname%3DEtcdReplicationDown
+
+*03:03 swfrench [https://sal.toolforge.org/log/jXOq7Y0BGiVuUzOd-9We depools], then [https://sal.toolforge.org/log/252s7Y0BxE1_1c7syqDY repools] mw2268, in order to test replication; the conftool events propagate via etcd-mirror successfully.
+
+==Detection==
+We were paged when etcd-mirror failed. (A [[Incidents/2022-09-08_codfw_appservers_degradation|prior incident]] was exacerbated after the paging was accidentally dropped in the migration to alertmanager; that was fixed in [[phab:T317402|T317402]] as a followup. It was only a moderate factor in that incident, because SREs independently noticed errors in the etcd-dependent tools they were using. By contrast, if the alert hadn't paged us here, it's likely nobody would have noticed the problem for much longer.)
+
+In addition to that EtcdReplicationDown alert, we also got a non-paging SystemdUnitFailed alert, which is redundant but not harmfully so (and might be a useful extra pointer for responders not familiar with etcd-mirror).
+
+We also got five separate non-paging JobUnavailable alerts for etcd-mirror, at 1:48, 2:38, 2:38, 2:43, and 2:53, the last one being ''after'' etcd-mirror had resumed. These didn't contribute any extra information.
+
+==Conclusions ==
+
+===What went well?===
+
+* Automated monitoring detected the replication failure.
+* Wikitech documentation on etcd and etcd-mirror, along with etcd's own documentation, gave us most of what we needed to root-cause and work around the problem.
+* Manually advancing the index value was both feasible to do (because of the expressive REST API allowing us to modify the replication state) and an effective resolution (in part because there were less than 2,000 total unreplicated events, meaning we could advance to an available state with confidence that we weren't losing any data).
+
+===What went poorly?===
+
+* [[phab:T317537|T317537]] hadn't been addressed after a prior incident, so we had little guidance on safely restarting etcd-mirror, especially with <code>--reload</code>.
+
+===Where did we get lucky?===
+
+* Scott had just started digging into the internals of etcd-mirror, including a meeting ''less than 36 hours earlier'' on its failure modes, so he was a fresh subject matter expert and (despite not being on call yet) happened to be available at the time of the incident.
+* Nothing else went wrong simultaneously, during the time when conftool replication was unavailable.
+* Fewer than 2,000 non-conftool etcd events had occurred in eqiad by the time we identified a potential mitigation (otherwise we could not safely advance the index to a point that would allow replication to recover).
+
+==Links to relevant documentation==
+
+* [[Etcd/Main_cluster#Replication]]
+* [[Service_restarts#etcd]]
+* [[Conftool]]
+* [[Monitoring/check_systemd_state]]
+* https://etcd.io/docs/v2.3/api/#watch-from-cleared-event-index
+
+==Actionables==
+
+* Long-term solution: Switch conftool from etcd v2 to v3. As part of this effort, etcd-mirror will be replaced with an alternative solution for cross-site replication, a requirement for which is resilience to this class of problem. ([[phab:T350565|T350565]])
+* In the meantime, consider building the recovery described at https://etcd.io/docs/v2.3/api/#watch-from-cleared-event-index into etcd-mirror, so that it can detect and handle this situation automatically. It may or may not be worth the engineering effort, depending on the timeline for moving to v3, but now that there's much more traffic to etcd keys outside of /conftool (notably because of Spicerack locking) this situation is more likely than it used to be, so we may want to be resilient to it even in the short term. Alternatively, we could replicate the entire keyspace and not just /conftool, if etcd-mirror can sustain the load. ([[phab:T358636|T358636]])
+* Update [[Etcd/Main cluster#Replication]] documentation with safe restart conditions and information. Populate the "TODO" playbook link for EtcdReplicationDown in the process. ([[phab:T317537|T317537]])
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|There were only two responders and no user impact, so we didn't bother with a doc.
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|No user impact, so a status page entry wasn't appropriate.
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|[[phab:T317537|T317537]]
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

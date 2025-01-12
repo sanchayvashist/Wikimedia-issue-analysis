@@ -1,0 +1,16 @@
+
+== Summary ==
+See also <https://lists.wikimedia.org/pipermail/wikitech-ambassadors/2020-June/002316.html>
+
+Documentation:
+
+* User reports: T257522, T256395, T255156
+
+* text-backend.inc.vcl.erb#72
+
+== Timeline ==
+Restricted document. 
+
+== Actionables ==
+
+* https://phabricator.wikimedia.org/T260098 Understand beresp.ttl=0 issues in Varnish

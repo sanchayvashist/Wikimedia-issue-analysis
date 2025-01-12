@@ -1,0 +1,35 @@
+
+
+==Summary==
+
+
+Network connectivity for the A4 codfw server rack went down due to full power loss of its switch. This caused lots of alert spam, but otherwise it had very little to no impact on users due to services not being pooled on codfw or redundancy working as intended.
+
+This was very similar incident to Incidents/2022-06-21 asw-a2-codfw accidental power cycle (bump wrong cable on switch side again). See that page for more details.
+
+After the secondary power cord was properly connected, connectivity recovered with no known issues. Power maintenance on that rack finished at 15:50.
+
+==Scorecard==
+
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	yes	Not paging
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	Not paging
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	yes	Not paging
+Process                                       	Was the incident status section actively updated during the incident?                                             	no 	No working doc
+Process                                       	Was the public status page updated?                                                                               	no 	not user facing
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	no 	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

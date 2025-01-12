@@ -1,0 +1,143 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T309691
+| paged-num = 26
+| responders-num = 6
+| coordinators = 
+| start = 2022-05-09 07:44:00
+| end = 2022-05-09 07:51:00
+| impact = For 5 minutes, all web traffic routed to Codfw received error responses. This affected central USA and South America (local time after midnight).
+}}
+<!-- Reminder: No private information on this page! -->
+
+The <code>confctl</code> command to depool a server was accidentally run with an invalid selection parameter (<code>'''host'''=mw1415</code> instead of <code>'''name'''=mw1415</code>, details at [[phab:T308100|T308100]]). There exists no "host" parameter, and Confctl did not validate it, but silently ignore it. The result was that the depool command was interpreted as applying to all hosts, of all services, in all data centers. The command was cancelled partway through the first DC it iterated on (Codfw).
+
+Confctl-managed services were set as inactive for most of the [[Codfw data center]]. This caused all end-user traffic that was at the time being routed to codfw (Central US, South America - at a low traffic moment) to respond with errors. While appservers in codfw were at the moment "passive" (not receiving end-user traffic), other services that are active were affected (CDN edge cache, Swift media files, Elasticsearch, [[WDQS]]…).
+
+The most visible effect, during the duration of the incident, was approximately 1.4k HTTP requests per second to not be served to text edges and 800 HTTP requests per second to fail to be served from upload edges. The trigger for the issue was a gap in tooling that allowed running a command with invalid input.
+
+{{TOC|align=right}}
+
+==Timeline==
+'''All times in UTC.'''
+
+*07:44 confctl command with invalid parameters is executed '''OUTAGE BEGINS'''
+*07:44 Engineer executing the change realizes the change is running against more servers than expected and cancels the execution mid-way
+*07:46 Monitoring system detects the app servers unavailability, 15 pages are sent
+*07:46 Engineer executing the change notifies others via IRC
+*07:50 confctl command to repool all codfw servers is executed '''OUTAGE ENDS''' 
+[[File:2022-05-09_confctl_5xx.png|none|thumb|confctl 5xx errors]]
+[[File:2022-05-09_confctl_error_graph.png|none|thumb|wikimediastatus.net]]
+
+==Detection==
+The issue was detected by both the monitoring, with expected alerts firing, and the engineer executing the change.
+
+Example alerts:
+
+07:46:18: <jinxer-wm> (ProbeDown) firing: (27) Service appservers-https:443 has failed probes (http_appservers-https_ip4) - <nowiki>https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown</nowiki> - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki>
+
+07:46:19: <jinxer-wm> (ProbeDown) firing: (29) Service appservers-https:443 has failed probes (http_appservers-https_ip4) #page - <nowiki>https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown</nowiki> - <nowiki>https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DProbeDown</nowiki>
+
+==Conclusions==
+When provided with invalid input, confctl executes the command against all hosts, it should fail instead.
+
+===What went well?===
+*Monitoring detected the issue
+*Rollback was performed quickly
+
+===What went poorly?===
+*Tooling allowed executing a command with bad input
+
+===Where did we get lucky?===
+*The engineer executing the change realized what was going on and stopped the command from completing
+
+===How many people were involved in the remediation?===
+*6 SREs
+
+==Links to relevant documentation==
+[[Conftool#The tools]]
+
+==Actionables==
+* [https://phabricator.wikimedia.org/T308100 T308100: Invalid confctl selector should either error out or select nothing]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were all engineering tools required available and in service?
+|yes
+|
+|-
+|Was there a runbook for all known issues present?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

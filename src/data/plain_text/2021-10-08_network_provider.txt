@@ -1,0 +1,51 @@
+ 
+
+==Summary and Metadata==
+The metadata is aimed at helping provide a quick snapshot of context around what happened during the incident.
+
+Incident ID   	2021-10-08 network provider                                                                                                                                                                                                                                                                                                                                                                                                                                        	UTC Start Timestamp:                                                                                                                                                                                                                                                                                                                                                                                                                                               	YYYY-MM-DD hh:mm:ss
+Incident Task 	https://phabricator.wikimedia.org/T292792                                                                                                                                                                                                                                                                                                                                                                                                                          	UTC End Timestamp                                                                                                                                                                                                                                                                                                                                                                                                                                                  	YYYY-MM-DD hh:mm:ss
+People Paged  	<amount of people>                                                                                                                                                                                                                                                                                                                                                                                                                                                 	Responder Count                                                                                                                                                                                                                                                                                                                                                                                                                                                    	<amount of people>
+Coordinator(s)	Names - Emails                                                                                                                                                                                                                                                                                                                                                                                                                                                     	Relevant Metrics / SLO(s) affected                                                                                                                                                                                                                                                                                                                                                                                                                                 	Relevant metrics
+% error budget
+Summary:      	For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions.	For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions.	For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions.
+Around 16:11 UTC our (non-paging) monitoring and users reported connectivity issues to and from our Eqiad location. Traceroutes showed a routing loop in a provider's network.
+
+At 16:19 UTC, using the provider's APIs, we asked the provider to stop advertising the prefixes for Eqiad on our behalf.
+
+At 16:24 UTC, the first reports of recoveries arrived as the change propagated through the DFZ.
+
+Unfortunately, due to the preponderance of the Eqiad impact and its recovery, we didn't notice that it also impacted users from Russia to reach the wikis through Esams.  We also didn't receive any NEL reports from most Russia users until 16:24 or later, as the location we use for NELs about Esams is itself Eqiad. 
+
+At around 17:15 UTC, our monitoring shows a full recovery, indicating the issue being resolved upstream.
+
+Impact: For up to an hour, some regions experienced a partial connectivity outage. This primarily affected the US East Coast for ~13 minutes, and Russia for 1 hour. A subset of readers and contributors from these regions were unable to reach any wiki projects. Services such as Phabricator and Gerrit Code Review were affected as well. It was a partial issue because the network malfunction was limited to one of many providers we use in the affected regions.
+
+Due to the span of this provider's network, the further a client is from Eqiad the more likely they will be using that provider to reach our network and thus could be impacted.
+
+Documentation:
+*Grafana: Ripe Atlas
+=Scorecard=
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	0    	Information not logged, scoring 0
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	0    	No page occurred
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	0    	No page occurred
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	0    	No page occurred
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	1    	
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	0    	
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	1    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	0    	No mention of previous occurrence, scoring 0
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	0    	NEL paging which was deployed shortly after
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	1    	
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	0    	NEL receive was degraded due to issues in eqiad which masked issue at other site
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	0    	
+Total score	Total score                                                                                                                                              	6    	
+
+==Actionables==
+*2021-10-07 network provider issues causing all Wikimedia sites to be unreachable for many users
+**patch to make NEL alert paging
+*Request RFO from provider

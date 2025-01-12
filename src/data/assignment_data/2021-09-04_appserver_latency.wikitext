@@ -1,0 +1,19 @@
+{{irdoc|status=final}}
+==Summary==
+An increase in load on a database server resulted in many queries being much slower to respond. This in turn meant backend traffic occupies appserver php-fpm workers for much longer, and a proportion of those requests will fail entirely due to unavailable workers. The failed requests got an error page with the message "''upstream connect error or disconnect/reset before headers. reset reason: overflow''".
+
+'''Impact''': For 37 minutes, backends were slow (taking several seconds to respond) and 2% of requests failed entirely. This affected logged-in users, most bots/API queries, and some page views from unregistered users for pages that were recently edited or otherwise expired from the CDN cache.
+
+'''Documentation''':
+
+* Public task about incident. [[phab:T290373|T290373]]
+*[https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1630721700000&to=1630725300000&var-datasource=codfw%20prometheus%2Fops&var-cluster=appserver&var-method=GET&var-code=200 Grafana: Application RED dashboard]
+<gallery mode="nolines" widths="200">
+File:4-Sep-2021-http-status.png|HTTP error rates.
+File:4-Sep-2021-latency.png|Latency buckets.
+File:4-Sep-2021-latency-quantile.png|Latency quantile estimates.
+</gallery>
+
+==Actionables==
+
+* [[phab:T277416|T277416]] (restricted)

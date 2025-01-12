@@ -1,0 +1,149 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| paged-num = 2
+| responders-num = 7
+| coordinators = kamila_
+| start = 2024-05-31 10:47:4
+| end = 2024-05-31 12:39:53
+| metrics = SLOs exist for Varnish and ATS, but these were still met
+| impact = Increase in response times for users using eqsin
+}}
+
+Hotlinking of an image on Commons caused link saturation in the eqsin datacentre. 
+
+{{TOC|align=right}}
+
+==Timeline==
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC.''
+
+*10:47 Page for port utilisation arrives  '''OUTAGE BEGINS'''
+*11:14: VictorOps page: DDos Detected (eqsin)
+*12:01 hnowlan adds requestctl/request-actions/cache-upload/hotlink_from_jio_blomen.yaml and requestctl/request-patterns/req/cache_buster_nnn.yaml. No effect
+*12:08 Incident opened. Kamila becomes IC
+*12:33 hnowlan manually deploys [[gerrit:c/operations/puppet/+/1037779|varnish frontend rule]] 
+*12:48 All damaging requests for URL in question are receiving HTTP 429 in response 
+*12:39 <+jinxer-wm> RESOLVED: DDoSDetected: FastNetMon has detected an attack on eqsin #page - <nowiki>https://bit.ly/wmf-fastnetmon</nowiki> - <nowiki>https://w.wiki/8oU</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DDDoSDetected</nowiki> '''OUTAGE ENDS'''
+
+==Detection==
+This incident was detected via paging for port utilisation in eqsin: <syntaxhighlight lang="irc">
+<+jinxer-wm> FIRING: Primary outbound port utilisation over 80%  #page: Alert for device asw1-eqsin.mgmt.eqsin.wmnet - Primary outbound port utilisation over 80%  #page
+</syntaxhighlight>Additionally FastNetMon detected what it perceived as a DDoS. This was more or less correct as the behaviours witnessed are similar to a simple DDoS attack.
+
+==Conclusions ==
+This was a somewhat familiar pattern, as we have seen similar issues in the past on a larger scale. 
+
+===What went well?===
+
+* ...
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* …
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|no
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

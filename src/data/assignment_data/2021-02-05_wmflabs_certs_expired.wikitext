@@ -1,0 +1,7 @@
+{{irdoc|status=review}}
+==Summary==
+Certificates for hostnames of Cloud VPS web proxies were able to expire, such for [https://puppet-compiler.wmflabs.org/ https://puppet-compiler.wmflabs.org].
+
+==Actionables==
+
+* https://phabricator.wikimedia.org/T273959

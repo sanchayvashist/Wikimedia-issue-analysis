@@ -1,0 +1,59 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = 0
+| responders-num = 2
+| coordinators = GModena
+| start = 2023-07-19 18:50:30
+| end = 2023-07-19 20:30:00
+| metrics = Flink Taskmanager uptime, service availability.
+| impact = The mw-page-content-change-enrich application (eqiad) has not been producing enriched events during the outage.
+}}
+
+== Description ==
+
+An enriched message exceeding Kafka's max.request.size caused the application's Kafka producer to crash. This in turn resulted in a Flink Taskmanager shutdown. 
+
+Full stacktrace is available at:
+https://logstash.wikimedia.org/app/discover#/doc/0fade920-6712-11eb-8327-370b46f9e7a5/ecs-k8s-1-1.11.0-6-2023.29?id=EeKfdIkB6U_kV85ADO_D
+
+HA tried to restart the application but the restart strategy, failed more than restart-strategy.fixed-delay.attempts times.
+
+A manual application restart was required. The offending message has seemingly been discarded.
+
+A fix is proposed in {{phab|T342399}}
+
+==Timeline==
+
+* 20:10:38 UTC: GModena opens thread to ACK the outage in #data-platform-engineering
+* 20:20:24 UTC: TChin identifies the root cause of the issue (
+* 20:24:00 UTC: GModena manually restarts the application
+* 20:44:00 UTC: GModena silences Kafka Consumer lag alerts while the application catches up with queues messages.
+
+==Detection==
+
+GModena and TChin reacted to alerts triggered by degrading SLIs.
+
+==Conclusions ==
+
+* Application is running.
+* We know what needs to be fixed.
+
+===What went well?===
+
+===What went poorly?===
+
+===Where did we get lucky?===
+
+*
+
+==Links to relevant documentation==
+
+==Actionables==
+
+* increase max message size allowed by Kafka
+* Filter out messages larger than the max allowed size; {{phab|T342399}}
+
+==Scorecard==

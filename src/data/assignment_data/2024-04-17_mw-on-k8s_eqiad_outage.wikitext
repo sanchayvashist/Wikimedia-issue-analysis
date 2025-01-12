@@ -1,0 +1,161 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T362766
+| paged-num = 
+| responders-num = 5
+| coordinators = 1
+| start = 20240417-04-17 09:10:00
+| end = 20240417-04-17 09:50:00
+| impact = According to Traffic's graphs, from HAproxy's POV, non 5XX requests (text+upload) dropped from 138K rps, to 120K - 130K rps for 20'
+}}
+
+[https://phabricator.wikimedia.org/T346690 mcrouter daemonset on mw-on-k8s:] The mediawiki pod has 9 containers. We were working on reducting this number to 7, by introducing the mw-mcrouter service. In practice, our end goal was that each mw-on-k8s pod would use a standalone mcrouter pod running within the same node, instead of its own mcrouter container. From mediawiki's POV, mcrouter's location would be <code>mcrouter-main.mw-mcrouter.svc.cluster.local:4442</code> instead of <code>127.0.0.1:11213</code>. The same change was deployed on codfw the day before, but codfw has less traffic. 
+
+This change increased the number of DNS requests towards CoreDNS, from an average of 40k req/s to 110k req/s, overwhelming the pods.
+
+==== Status at ~09:20 UTC: ====
+* scap was blocked waiting for the deployment of mw-on-k8s to finish
+* during the deployment, the mediawiki pods were never becoming ready, and after a while scap attampted to rollback
+* CoreDNS pods (3) were overwhelmed and oom killed over and over again (being left in an crashloopbackoff state)
+
+==== Actions: ====
+* depooled mediawiki reads from eqiad (via discovery)
+* Increase memory limits and replicas for coredns on wikikube clusters
+* terminate mw-server FQDN with a dot - <code>mcrouter-main.mw-mcrouter.svc.cluster.local'''.''':4442</code> 
+* reverted eqiad to use in-pod mcrouter container
+* pooled eqiad back
+
+==== Commits: ====
+* https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/1020778
+* https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/1020765
+* https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/1020774
+==== Graphs: ==== 
+[[File:Coredns eqiad rps April 16-17.png|400px|Coredns eqiad April 16th vs April 17th]]
+
+[[File:HAProxy status (1 + 2 + 3 + 4)xx.png|400px|HAProxy status (1 + 2 + 3 + 4)xx]]
+
+== Timeline ==
+SAL entry: https://sal.toolforge.org/log/yk9Q644BGiVuUzOdxNwu
+
+''All times in UTC.''
+
+* '''09:08''' effie runs scap sync-world to deploy mediawiki deployments: use mcrouter daemonset for both DCs T346690
+* '''09:10''' antoine observes a higher level of mw related events arriving to logstash
+* '''09:18 OUTAGE BEGINS'''
+* '''09:18''' ALERT: (PHPFPMTooBusy) firing: (3) Not enough idle PHP-FPM workers for Mediawiki mw-api-ext at eqiad: 30.2% idle
+* '''09:26''' ALERT: (MediaWikiLatencyExceeded) firing: (4) p75 latency high: eqiad mw-api-ext (k8s) 6.79s
+* '''09:44''' claime depools eqiad in mw-web-ro, mw-api-ext-ro, mw-api-int-ro
+* '''09:44 OUTAGE ENDS'''
+* '''10:00''' akosiaris manually bumps coredns pods to 6 (eqiad+codfw)
+* '''10:16''' effie merges and deploys any relevant code changes and reverts <nowiki>https://gerrit.wikimedia.org/r/1020768</nowiki> and <nowiki>https://gerrit.wikimedia.org/r/1020774</nowiki>
+* '''10:53''' effie pools back eqiad for mw-web-ro, mw-api-ext-ro, mw-api-int-ro
+
+==Detection==
+Antoine noticed an elevated number of events coming from the mediawiki channel on logstash. A few minutes later we got our first alert that we are running out of available php workers. 
+
+==Conclusions ==
+
+
+===What went well?===
+
+* Everyone in ServiceOps was around
+* Janis quickly figured out that we were missing the final dot in the FQDN
+
+===What went poorly?===
+
+* While we deployed the very same change on codfw the day before, we didn't properly analyse the impact. 
+
+===Where did we get lucky?===
+
+* No luck. 
+
+==Links to relevant documentation==
+
+
+==Actionables==
+
+TBA
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

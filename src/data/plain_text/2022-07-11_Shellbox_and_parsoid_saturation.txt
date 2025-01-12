@@ -1,0 +1,85 @@
+
+
+==Summary==
+
+
+The reason appears to be background parsing associated with VisualEditor. The MWExtensionDialog as used in Score has the default 0.25s debounce preview, meaning we're shelling out to Lilypond through Shellbox every quarter-second while the user is typing -- regardless of whether an existing shellout is in flight. That's reasonable for lots of parsing applications that take much less time than that, but for something as heavy as these score parses, we should extend that interval, which would have the effect of cutting down on the request rate to shellbox.
+
+
+
+==Timeline==
+
+
+* 13:14 (ProbeDown) firing: Service shellbox:4008 has failed probes (http_shellbox_ip4) #page
+* 13:18 Discussion on -security about the nature of the issue. URLs mentioned above seen as heavy hitters.
+* 13:34 Parsoid and shellbox recovering  RECOVERY - Mobileapps LVS eqiad on mobileapps.svc.eqiad.wmnet is OK: All endpoints are healthy https://wikitech.wikimedia.org/wiki/Mobileapps_%28service%29
+* 13:37  Incident document created.  Simon becomes IC.
+* 13:21 Incident agreed as resolved.
+* 13:19 Paging again:  <jinxer-wm> (ProbeDown) firing: Service shellbox:4008 has failed probes (http_shellbox_ip4)
+* 14:22 Continuing the same document and IC.
+* 14:26 (ProbeDown) resolved: Service shellbox:4008 has failed probes (http_shellbox_ip4) #page 
+* 14:48 Follow up page a result of spillover from initial incident.  
+
+==Detection==
+
+* 13:14 (ProbeDown) firing: Service shellbox:4008 has failed probes (http_shellbox_ip4) #page - https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All
+
+==Conclusions==
+===What went well?===
+
+*automated monitoring detected the incident
+*Had a good amount of incident responders
+===What went poorly?===
+
+*We're missing X-IP (Original IP forwarded by proxy), no referrer from mobile apps, (UA: MobileApps/WMF)
+*Issue was known but not yet addressed.
+
+===Where did we get lucky?===
+
+* No, incident would have resolved it self eventually. 
+
+===How many people were involved in the remediation?===
+
+* 4 SREs during incident
+* 1 IC
+* 2 SRE for actual fix
+
+==Links to relevant documentation==
+
+* Grafana: Mobileapps dashboard
+
+* stack trace, https://phabricator.wikimedia.org/P31003
+
+* Tags for problem description and fix: https://phabricator.wikimedia.org/T312319
+
+==Actionables==
+
+* Reduce Lilypond shellouts from VisualEditor https://phabricator.wikimedia.org/T312319
+* Update MobileApp to set a proper User-Agent https://phabricator.wikimedia.org/T314663
+* Add X-IP header to proxied traffic
+
+==Scorecard==
+
+
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	yes	
+Process                                       	Was the incident status section actively updated during the incident?                                             	yes	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	8  	

@@ -1,0 +1,152 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T325056
+| paged-num = 2
+| responders-num = 4
+| coordinators = Alexandros
+| start = 2022-12-13 12:15:00
+| end = 2022-12-13 12:30
+| impact = All users were unable to edit for a period of 9 minutes.
+}}
+
+
+A wrong configuration change caused sessionstore pods to be unschedulable in our WikiKube cluster. This resulted in failed edits across all projects for a period of 9 minutes.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+12:15 '''OUTAGE BEGINS'''.  '''Alexandros''' becomes IC.
+
+12:15 (ProbeDown) firing: Service sessionstore:8081 has failed probes (http_sessionstore_ip4) #page -
+
+12:16 It becomes apparent that sessionstore is no longer serving requests, after an increase and some pod restarts
+
+12:18 A correlation is made to a change for MatchNodeSelector for sessionstore
+
+12:24 nodeAffinity for specific rack rows was removed manually from sessionstore deployments in k8s (basically <nowiki>https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/867572</nowiki> was done manually via kubectl edit) '''OUTAGE ENDS'''
+
+12:25 Incident created in wikimediastatus.net
+
+12:27 Status page updated
+
+12:30 Resolved
+
+==Detection==
+Automated monitoring detected the issue
+
+(ProbeDown) firing: Service sessionstore:8081 has failed probes (http_sessionstore_ip4) #page -
+
+==Conclusions ==
+
+===What went well?===
+
+* The incident was immediately detected by automated monitoring and the problem was quickly identified and fixed.
+* Multiple people responded
+* An IC was appointed quickly
+
+===What went poorly?===
+
+* Incident status page was update at the end of the rather short incident.
+
+===Where did we get lucky?===
+
+* Nowhere?
+
+==Links to relevant documentation==
+
+Change that caused the issue:
+
+https://gerrit.wikimedia.org/r/c/operations/puppet/+/791597/9
+
+The CR changed the typology zone annotation for Kubernetes Nodes running on Ganeti from something like “row-a” to “ganeti-eqiad-b”, referencing the Ganeti cluster name and group. With sessionstore Pods being only scheduled to specific rows it made them unschedulable in the cluster.
+[[File:Sessionstore outage - 2022-12-13.png|thumb]]
+[https://grafana.wikimedia.org/d/000001590/sessionstore?orgId=1&from=1670933228178&to=1670934782412 Grafana]
+
+==Actionables==
+Fix for sessionstore deployments:
+
+https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/867572
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|2 vs 2, let's say it's sufficient
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+| Was the public status page updated? 
+|yes
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|14
+|
+|}

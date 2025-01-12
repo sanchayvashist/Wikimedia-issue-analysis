@@ -1,0 +1,33 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+While working on [https://phabricator.wikimedia.org/T272714 updating EventGate to support Prometheus], Andrew Otto deployed the changes to eventgate-analytics in codfw (then-active DC).  This change removed the prometheus-statsd-exporter container in favor of direct Prometheus support, as added in recent versions of service-runner and service-template-node.
+
+The deploy went fine in the idle "staging" and "eqiad" clusters, but when deploying to codfw, request latency from MediaWiki to eventgate-analytics spiked, which caused PHP worker slots to fill up, which in turn caused some MediaWiki API requests to fail.
+
+The helm tool noticed that the eventgate-analytics deploy to codfw itself was not doing well, and auto-rolled back the deployment:
+
+<pre>
+$ kube_env eventgate-analytics codfw; helm history production
+REVISION	UPDATED                 	STATUS    	CHART           	APP VERSION	DESCRIPTION
+[...]
+4       	Wed Jul 14 16:07:12 2021	SUPERSEDED	eventgate-0.3.1 	           	Upgrade "production" failed: timed out waiting for the co...
+5       	Wed Jul 14 16:17:18 2021	DEPLOYED  	eventgate-0.2.14	           	Rollback to 3
+</pre>
+
+'''Impact''': For ~10 minutes, MediaWiki API clients experienced request failures.
+
+'''Documentation''':
+* [https://grafana.wikimedia.org/d/VTCkm29Wz/envoy-telemetry?orgId=1&from=1626278199112&to=1626279999112&var-datasource=codfw%20prometheus%2Fops&var-origin=appserver&var-origin_instance=All&var-destination=eventgate-analytics Grafana: Envoy telemetry]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?viewPanel=9&from=1626276391814&orgId=1&to=1626279991814&var-datasource=codfw%20prometheus%2Fops&var-cluster=api_appserver&var-method=GET&var-code=200 Grafana: Application Servers dashboard]
+* [https://grafana.wikimedia.org/d/VTCkm29Wz/envoy-telemetry?viewPanel=14&orgId=1&from=1626278171118&to=1626279427383 Grafana: Envoy telemetry / Upstream latency]
+
+== Actionables ==
+* Figure out why this happened and fix.  Based on [https://logstash.wikimedia.org/app/discover#/doc/logstash-*/logstash-syslog-2021.07.14?id=YPDMpXoBStjVNP_PTvXC this log message], it seems likely that a bug in the service-runner prometheus integration caused the nodejs worker process to die. [DONE]
+** Further investigation uncovered that <code>require('prom-client')</code> within a worker causes the observed issue.  Both service-runner and node-rdkafka-prometheus require prom-client.  It was proposed to patch  node-rdkafka-prometheus to handle passing in the prom-client instance. 
+** node-rdkafka-prometheus is an unmaintained project, so we have forked it to @wikimedia/node-rdkafka-propetheus and fixed the issue there.  Additionally, if [https://github.com/siimon/prom-client/issues/448 this issue in prom-client] is fixed, we probably won't need the patch we made to node-rdkafka-prometheus for this fix.

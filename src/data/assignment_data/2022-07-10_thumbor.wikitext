@@ -1,0 +1,116 @@
+{{irdoc|status=draft}}
+
+==Summary==
+{{Incident scorecard
+| task =T312722 
+| paged-num = 
+| responders-num =3 
+| coordinators = 
+| start = 
+| end = 
+|impact=For several days, Thumbor p75 service response times gradually regressed by several seconds.}}
+
+Due to a uptream bug introduced in a firejail update, Thumbor constantly restarting itself. This lead to increased error rates, and also increased delays from the HAProxy in front of it.
+
+{{TOC|align=right}}
+
+==Detection==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+==Links to relevant documentation==
+[[File:Grafana thumbor 2022-07-10.png|thumb|Grafana thumbor 2022-07-10]]
+*[https://grafana.wikimedia.org/d/Pukjw6cWk/thumbor?orgId=1&from=1657237705302&to=1657584019941 Grafana dashboard: Thumbor] 
+
+==Actionables==
+
+*…
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|
+|
+|-
+|Was the public status page updated?
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

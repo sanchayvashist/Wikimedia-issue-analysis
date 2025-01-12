@@ -1,0 +1,58 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+
+A [https://gerrit.wikimedia.org/r/c/operations/puppet/+/666899 patch] was merged and deployed to all hosts containing a syntax error on the <code>/etc/sudoers</code> file. This meant sudo did not work for the period of time indicated below, affecting mostly nagios execution (alerting) and creating root mail spam. As a consequence, also mail delivery got overloaded/delayed.
+
+== Timeline ==
+* 08:50 [https://gerrit.wikimedia.org/r/c/operations/puppet/+/666899 666899] is merged, containing a syntax error in /etc/sudoers
+* 08:51  People warn on IRC unable to sudo on db1107 due to a parse error (>>> /etc/sudoers: syntax error near line 6 <<<), and other hosts
+* 08:52 100s of emails start to arrive to root@ with *** SECURITY information for <hostname>*** (sudo failures)
+* 08:55 <jbond42> !log disabled puppet pending rollback of https://gerrit.wikimedia.org/r/666899
+* 08:59 klausman merges [https://gerrit.wikimedia.org/r/c/operations/puppet/+/667110 667110], containing a fix, and runs puppet-merge soon after.
+* 09:00 Incident opened.  jynus becomes IC.
+* 09:06 Puppet reenabled
+* 09:12 Start reenabling puppet fleetwide
+* 09:23 Puppet run at 10%
+* 09:37 Puppet run at 30%
+* 09:50 Puppet run at 50%
+* 10:17 Puppet run at 80%
+* ~10:20ish UNKNOWN nagios alerts gone
+* 10:33 puppet run finished
+* 11:40: jbond took over ic
+* 11:45: mx2001 queue has remain static at 4344 for 20 minutes
+* 11:45: mx1001 queue reducing at between  0-3 msgs/sec
+* 12:55: run `exiqgrep -i -o 7200 -y 10800 -f 'root@wikimedia.org' | xargs exim -Mrm` on mx servers
+* 12:55: queue down to ~ 2000 (891 frozen) msgs on mx1001 and 500 (434 frozen) on mx2001 
+* 13:02: Still receiving 450-4.2.1 from gmail for a number of recipients
+* 13:30: reports of flood emails slowing down 
+* 13:43: message queue excluding frozen messages on mx2001 is 0 (mx1001 ~ 800)
+* 14:00 ran the following to push through the last few messages:  `for i in $(sudo exiqgrep -f nagios@lists1001.wikimedia.org -i) ; do sudo exim -M ${i} ; sleep 1 ; done `
+* 14:05: unfrozen queue is still at 784 however the queue looks normal 
+* 14:05: Incident resolved
+
+== Cleanup GMail ==
+
+You can use this filter to find them all:
+  from:(nagios@) SECURITY after:2021-02-25 
+Look also in your spam folder.
+
+== Remediation considerations ==
+As Puppet runs as root and is triggered by a cron entry, an issue with sudo does not affect the capability of running Puppet and hence to fix the problem.
+
+In addition as Cumin does SSH as root in all hosts, it's also possible to ssh into the cumin host, become root using the password in pwstore and perform an emergency fix via Cumin on all hosts. If for some reason it would not be possible to SSH directly into the Cumin host, it's also possible to connect to it via the management console and login from there directly as root.
+
+== Actionables ==
+
+* Add `validate_cmd` to sudoers file
+** https://gerrit.wikimedia.org/r/667119
+** https://gerrit.wikimedia.org/r/667120 
+* Understand safe batch numbers for fleetwide puppet runs
+* Prevent automatic email to get marked as spam by GMail
+* Add exim queue metrics to grafana https://phabricator.wikimedia.org/T275867
+* Investigate why the exim queue has many frozen messages for wiki at wikimedia.org and otrs at ticket.wikimedia.org

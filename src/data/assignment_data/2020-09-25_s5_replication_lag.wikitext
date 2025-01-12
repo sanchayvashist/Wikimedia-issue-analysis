@@ -1,0 +1,113 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+
+A number of s5 database replicas in the  Eqiad and Codfw data centres alerted about replication being stopped due to a duplicate key. This lead to watchlist and recentchanges delays.
+
+'''Impact''': Editors of wikis hosted in the s5 section (see [https://noc.wikimedia.org/conf/highlight.php?file=dblists/s5.dblist s5.dblist]) saw stale data in recentchanges and watchlist interfaces. 
+{{TOC|align=right}}
+
+=== Affected wikis at time of incident ===
+
+* avk.wikipedia.org
+* ceb.wikipedia.org
+* de.wikipedia.org
+* en.wikivoyage.org
+* ja.wikivoyage.org
+* lld.wikipedia.org
+* mg.wiktionary.org
+* mh.wiktionary.org
+* mus.wikipedia.org
+* sh.wikipedia.org
+* sr.wikipedia.org
+
+== Timeline ==
+
+'''All times below are in UTC and referring to 2020-09-25'''
+
+* 11:42: pages for s5 replication for db2137, db2139, db2089, db2099
+* 11:45 icinga is reporting about a duplicate key in enwikivoyage's ipblocks table
+* 11:51: sobanski pings jcrespo
+'''* 11:55 Incident opened. Alexandros Kosiaris becomes IC'''
+* 11:58 jcrespo joins
+* 12:13 jcrespo deletes duplicate ipb_id=16326 on db2089 and starts replication manually
+* 12:16: db2089 lag recovers
+* 12:17: jcrespo applies same fix to all hosts
+* 12:22: All hosts lag recover
+* 12:23: It is decided that all eqiad hosts exhibiting the issue, will not be touched to allow use of them as guinea pigs U during the research phase of the root case
+'''* 12:25: Incident ends.'''
+* 15:23 jynus: fixing enwikivoyage ipblocks inconsistency cluster-wide T263842 (to prevent the issue again on the same table). * All hosts back to normal (including eqiad). https://sal.toolforge.org/log/MFncxXQBgTbpqNOm_cm1
+
+== Detection ==
+Automated monitoring caught the issue, SRE was paged about stopped replication in a number of s5 replicas. The alerts were appropriate, sufficient and to the point. People responded and escalated to more equipped ones to handle the incident.
+
+== Conclusions ==
+
+There are two possible explanations for this crash:
+
+1) The drift was there and we inserted a row that touched it
+
+2) The drift was generated somehow from MW.
+
+The first option is hard to see, as that table was recently checked before the switchover and came up clean (https://phabricator.wikimedia.org/T260042)
+There is also the fact that the row that failed had a timestamp from around the time of the crash.
+The sequence of events within the transaction that failed is interesting and it definitely didn't help that we are using INSERT IGNORE here. This is a summary from the binlog transaction for the broken entry and with the affected ipb_address_unique UNIQUE:
+
+ 'REDACTED',ipb_user = 0,ipb_auto = 0
+
+This contains the first insert that went thru (it maybe failed, but as it has the IGNORE...) with the timestamp: 20200925113933 :
+
+ BEGIN
+ INSERT /* MediaWiki\Block\DatabaseBlockStore::insertBlock  */ IGNORE INTO `ipblocks`
+Then an UPDATE on that same row that broke on some replicas, with a duplicate entry, it has this timestamp: 20200925110538.
+
+ UPDATE /* MediaWiki\Block\DatabaseBlockStore::updateBlock  */  `ipblocks` SET ipb_address = 'REDACTED',ipb_user = 0,ipb_timestamp = '20200925110538',ipb_auto = 0
+That is the row that was already existing on some hosts:
+
+ root@db2089.codfw.wmnet[enwikivoyage]> SELECT * FROM ipblocks where ipb_address = 'xxxx'\G
+ *************************** 1. row ***************************
+          	ipb_id: xxxx
+     	ipb_address: xxx
+        	ipb_user: 0
+    	ipb_by_actor: xxxx
+   	ipb_reason_id: xxxx
+   	ipb_timestamp: 20200925110538
+ The values for ipb_address_unique on the insert were:
+ 62.XXX.2X,0,0
+
+And the values for that same UPDATE for that same key were exactly the same, with just the modification of the timestamp from 20200925113933 to 20200925110538.
+What doesn't make sense to me is that there was an existing row with 20200925110538 timestamp (even if the timestamp isn't part of the UNIQUE).
+
+Looking for that that same IP on the existing binlogs on an affected replica (binlogs from today till 20th Sept) and there's no trace of that IP being added there. Same on the Eqiad master, which has binlogs from 29th Aug till today, no trace of that IP being added to ipblocks, before the sequence of events. The timestamps of the first entry on eqiad and codfw master are the same.
+
+Option 2 for this crash would imply that MW somehow introduced that inconsistency with an unsafe statement like INSERT IGNORE, however, it is difficult to know why only a few hosts failed.
+=== What went well? ===
+* Automated monitoring caught the issue
+* People responded to the pages
+* The pages were accurate and pointed out the issue
+* Incident was opened promptly, the more appropriate people were pinged quickly.
+* Mitigation was tested, applied on select hosts and then applied to all hosts.
+
+=== What went poorly? ===
+* The deeper causes of this aren't yet known
+* Only 2 people were most qualified to react and weren't in front of a computer right at the time. This signifies a low bus factor
+
+=== Where did we get lucky? ===
+* Not all of the replicas exhibited the issue, allowing for s5 to continue operating quite normally, albeit with performance degradation.
+
+=== How many people were involved in the remediation? ===
+* 4 SREs (one of which was Incident Coordinator).
+
+== Links to relevant documentation ==
+
+* None. The alert pointed to https://wikitech.wikimedia.org/wiki/MariaDB/troubleshooting#Depooling_a_replica, but this would not have helped in this case. Arguably, this event requires knowledge of what has happened, familiarity with MySQL/MariaDB databases and a judgement call in order to avoid making the split brain worse. A runbook may never be appropriate
+
+== Actionables ==
+* Investigate the deeper causes of the incident. [https://phabricator.wikimedia.org/T263842 T263842]. Deeper causes still unknown. {{done}}
+* Automatic and continuous data checks (at least for the most important/big tables) [https://phabricator.wikimedia.org/T207253 T207253]
+* Re-evaluate the use of ''INSERT IGNORE'' on ''ipblocks'' [https://phabricator.wikimedia.org/T264701 T264701]

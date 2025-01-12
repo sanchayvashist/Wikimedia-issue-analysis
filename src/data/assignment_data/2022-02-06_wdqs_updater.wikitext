@@ -1,0 +1,133 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T301147
+| paged-num = 0
+| responders-num = 0
+| coordinators = 0
+| start = 2022-02-06 23:00:00
+| end = 2022-02-07 06:20:00
+| metrics = WDQS Updater Lag, Wikidata MaxLag
+| impact = For about 7 hours, WDQS updates failed to be processed. As a consequence, bots and tools were unable to edit Wikidata during this time.
+}}
+The streaming updater stopped to function properly because a k8s node misbehaved. More details at [[Incidents/2022-02-22 wdqs updater codfw]].
+
+'''Documentation''':
+*https://phabricator.wikimedia.org/T301147
+For 7 hours (<code>2022-02-06T23:00:00</code> to <code>2022-02-07T06:20:00</code>) the streaming updater in <code>eqiad</code> stopped working properly preventing edits to flow to all the wdqs machines in eqiad.
+
+The lag started to rise in eqiad and caused edits to be throttled during this period:
+
+Investigations:
+
+* the streaming updater for WCQS went down from <code>2022-02-06T16:32:00</code> to <code>2022-02-06T23:00:00</code>
+* the streaming updater for WDQS went down from <code>2022-02-06T23:00:00</code> to <code>2022-02-07T06:20:00</code>
+* the number of total task slots went down to 20 from 24 (4tasks == 1pod) between <code>2022-02-06T16:32:00</code> and <code>2022-02-07T06:20:00</code> causing resource starvation and preventing both jobs from running at the same time (<code>flink_jobmanager_taskSlotsTotal{kubernetes_namespace="rdf-streaming-updater"}</code>)
+* kubernetes1014 (T301099) seemed to have showed problems during this same period (<code>2022-02-06T16:32:00</code> to <code>2022-02-07T06:20:00</code>)
+* the deployment used by the updater used one POD (<code>1db45eb6-2405-4aa3-bec1-71fcdbbe4f9a</code>) from kubernetes1014
+* the flink session cluster was able to regain its 24 slots after <code>1db45eb6-2405-4aa3-bec1-71fcdbbe4f9a</code> came back (at <code>2022-02-07T08:07:00</code>), then this POD disappeared again in favor of another one and the service successfully restarted.
+* during the whole incident k8s metrics & flink metrics seem to disagree:
+** flink says that it lost 4 task managers (1 POD)
+** k8s always reports at least 6 PODS (<code>count(container_memory_usage_bytes{namespace="rdf-streaming-updater", container="flink-session-cluster-main-taskmanager"})</code>)
+
+Questions (answered):
+
+* why do flink and k8s metrics disagree (active PODs vs number of task manager)?
+** Flink could not contact the container running on kubernetes1014 and thus freed it's resources (task slots), k8s attempted to kill the container as well but did not fully reclaim the resources (PODs) allocated to it
+* why a new POD was not created after kubernetes1014 went down (making <code>1db45eb6-2405-4aa3-bec1-71fcdbbe4f9a</code> unavailable to the deployment)?
+** From the k8s point of view kubernetes1014 was flapping between the ready and not ready state and preferred to reboot containers there
+
+What could we have done better:
+
+* we could have route wdqs traffic to codfw during the outage and avoid throttling edits
+
+Action items:
+
+* T305068: Alert if the number of flink tasks slots go below what we expect
+* T293063: adapt/create runbooks for the streaming updater and take this incident into account (esp. we should have had reacted to the alert and routed all wdqs traffic to codfw)
+* To be discussed with service ops:
+** Investigate and address the reasons why after a node failure k8s did not fulfill its promise of making sure that the rdf-streaming-updater deployment have 6 working replicas
+** If the above is not possible could we mitigate this problem by over-allocating resources (increase the number of replicas) to the deployment to increase the chances of proper recovery if this situation happens again?
+* T277876: to possibly improve the resiliency of the k8s nodes
+
+==Actionables==
+*[[phab:T305068]]<mark>: alert when flink does not have the capacity it expects</mark>
+*[[phab:T293063]]<mark>:adapt/create runbooks/cookbooks for the wdqs streaming updater</mark>
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|Did not page
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|Did not page
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|Did not page
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|6
+|
+|}

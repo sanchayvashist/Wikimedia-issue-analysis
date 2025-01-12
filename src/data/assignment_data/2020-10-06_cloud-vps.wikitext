@@ -1,0 +1,29 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+See also: https://lists.wikimedia.org/pipermail/cloud-announce/2020-October/000324.html
+
+See also: https://phabricator.wikimedia.org/T264694
+
+==Summary==
+
+Sensitive credentials (authentication tokens) were leaked via publicly accessible, memcached servers, on a default port & without authentication.
+Tokens can be used to escalate privileges and (at least) “bump quotas, create and destroy” arbitrary VMs in Cloud VPS/Toolforge. While the service runs in the “production” realm, no escalation paths to other production services and hosts are known so far.
+
+These tokens are for access to the Keystone API, which is firewalled to the Cloud VPS and production networks, so they could not be used directly from the internet easily without changing signed cookies in Django/Horizon web UI somehow (which should require the secret key). Therefore, this exposure would theoretically benefit a malicious cloud user to the extent that they could manipulate the Keystone API from inside cloud according to the permissions of the particular captured token.
+
+Access was blocked in eqiad at 02:21 UTC and in the development environment in codfw at 08:43 UTC.
+Keystone auth tokens were manually rotated (the generally have a lifetime of 24 hours)
+Investigation of potential privilege escalation within Cloud VPS (via leaked Keystone tokens) ongoing, additional mail to be sent to cloud users (see below).
+
+
+==Actionables==
+* Better understand and refine port-scanning tools in order to detect future vulnerabilities like this one. The daily network scan is in the process of being fixed to scan all ports (instead of a selection of 2000) and when that has happened we need to do a one off investigation of the findings to establish a base point so that all further runs can be studied as a diff against the base check.
+* Defense-in-depth measures for cloudcontrol services. Per OpenStack recommendations, “[f]or production deployments, we recommend enabling a combination of firewalling, authentication, and encryption to secure it.”. The first of the three failed here, but it was all three that were missing and allowed this vulnerability.
+* More fine-grained access control for the ferm ranges in the profile::memcached::instance class to allow to restrict access for cloudcontrol* further.
+* Extend the daily network port scan to cover 64k ports instead of 2000 well-known, this requires some changes to the packet filters running on on our servers https://phabricator.wikimedia.org/T264888
+* Meet with security to discuss threat model for cloud services

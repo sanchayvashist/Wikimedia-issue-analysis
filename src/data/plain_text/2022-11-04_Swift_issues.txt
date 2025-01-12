@@ -1,0 +1,93 @@
+
+
+
+== Summary ==
+…
+
+For 49 minutes the Swift/mediawiki file backend returned errors (how many? Which percentage?) for both reads and new uploads. 
+
+== Timeline ==
+
+All times are in UTC.
+
+
+* 14:32 (INCIDENT BEGINS)
+* 14:32 jinxer-wm: (ProbeDown) firing: Service thumbor:8800 has failed probes (http_thumbor_ip4) #page - https://wikitech.wikimedia.org/wiki/Runbook#thumbor:8800 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+* 14:32 icinga-wm: PROBLEM - Swift https backend on ms-fe1010 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Swift
+* 14:38 Incident opened.  denisse becomes IC.
+* 14:41 depool ms-fe2009 on eqiad
+* 14:44 restart swift-proxy on ms-fe1010
+* 14:48 restart swift-proxy on ms-fe1011
+* 14:51 restart swift-proxy on ms-fe1012
+* 14:52 repool ms-fe2009 on eqiad
+* 14:54 Statuspage incident posted “Errors displaying or uploading media files.”
+* 15:00 restart swift-proxy on codfw
+* 15:01 recovery of the ms-fe2* instance
+* 15:21 (INCIDENT RESOLVED) (Statuspage updated) 
+
+
+== Detection ==
+The issue was detected automatically and the engineers On Call received a page from Splunk on Call
+
+Alerts that fired during the incident:
+
+* Incident #3133
+* Incident #3134
+* Incident #3135
+* Incident #3136
+* Incident #3137
+
+The alerts that fired were useful for the engineers to solve the incident.
+
+== Conclusions ==
+
+=== What went well? ===
+
+* Automated monitoring detected the incident
+* Several engineers helped debug the issue
+
+=== What went poorly? ===
+
+* Our documentation for Swift could be updated.
+
+=== Where did we get lucky? ===
+
+* An expert in the Swift service was present
+* We had unused hardware laying around
+
+== Links to relevant documentation ==
+
+* 2022-11-01 Swift issues
+* 2022-11-04 Swift issues (II)
+
+== Actionables ==
+
+* Investigate why the alerts scalated to batphone even when the engineers on call have already ACK'd the initial alert.
+
+* Add runbooks, documentation on how to troubleshoot this issues.
+
+== Scorecard ==
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	no 	preparedness, we just discussed we don't understand what happened and that the documentation is a decade old
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the incident status section actively updated during the incident?                                             	yes	
+Process                                       	Was the public status page updated?                                                                               	yes	Jaime was not one of the oncallers nor the IC, but he was the first to speak up with the suggestion of updating the status page, quite a long time into the outage
+
+Checking who can access file
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	https://phabricator.wikimedia.org/T322424
+Process                                       	Are the documented action items assigned?                                                                         	no 	The incident is very recent
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	We don't know what's causing the issue so there was no way to have a task for it
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	no 	We didn't have any cummin cookbooks on how to restart the Swift service so the engineers had to figure out the right commands during the incident
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	6  	

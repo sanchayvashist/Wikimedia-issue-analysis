@@ -1,0 +1,159 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = 
+| responders-num = 
+| coordinators = 
+| start = 
+| end = 
+}}
+
+…
+
+<!-- Reminder: No private information on this page! --><mark>Summary of what happened, in one or two paragraphs. Avoid assuming deep knowledge of the systems here, and try to differentiate between proximate causes and root causes.</mark>
+
+{{TOC|align=right}}
+
+==Timeline==
+<mark>Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.</mark>
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC.''
+
+*00:00 (TODO) '''OUTAGE BEGINS'''
+*00:04 (Something something)
+*00:06 (Voila) '''OUTAGE ENDS'''
+*00:15 (post-outage cleanup finished)
+
+<!-- Reminder: No private information on this page! -->
+<mark>TODO: Clearly indicate when the user-visible outage began and ended.</mark>
+
+==Detection==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+==Conclusions ==
+
+<mark>OPTIONAL: General conclusions (bullet points or narrative)</mark>
+
+===What went well?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc</mark>
+
+===What went poorly?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc</mark>
+
+===Where did we get lucky?===
+
+* …
+
+<mark>OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc</mark>
+
+==Links to relevant documentation==
+
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* …
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

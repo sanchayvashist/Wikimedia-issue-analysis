@@ -1,0 +1,98 @@
+
+
+==Summary==
+
+
+An increase in POST requests to de.wikipedia.org caused an increase in load on one of the DB servers resulting in an increase in 503 responses and increased response time
+
+
+
+==Timeline==
+
+All times in UTC.
+
+*20:04 OUTAGE BEGINS
+*20:04 Received page "Service text-https:443 has failed probes"
+*20:08 rzl starts investigation
+*20:08 Received page "(FrontendUnavailable) firing: HAProxy (cache_text) has reduced HTTP availability"
+*20:08 rzl asked cjming to halt deploying
+*20:09 Recived page "(FrontendUnavailable) firing: varnish-text has reduced HTTP availability"
+*20:09 jbond takes IC 
+*20:10 < rzl> looks like a spike of DB queries to s5 that saturated php-fpm workers, seems like it's already cleared
+*20:11 Received recovery "RECOVERY - High average GET latency for mw requests on appserver"
+*20:11 < cwhite> Lots of POST to https://de.wikipedia.org
+*20:12 < rzl> s5 did see a traffic spike but recovered, still digging
+*20:13 Received recovery "resolved: (8) Service text-https:443 has failed probes"
+*20:13 Received recovery "resolved: HAProxy (cache_text) has reduced HTTP availability"
+*20:14 Received recovery "resolved: varnish-text has reduced HTTP availability"
+*20:14 OUTAGE ENDS
+*20:14 < cwhite> 2217 unique ips (according to logstash)
+*20:18 < bblack> identified traffic as "a bunch of dewiki root URLs"
+*20:22 < _joe_> php slowlogs mostly showed query() or curl_exec()
+*20:30 < _joe_> someone was calling radompage repeatedly?
+*20:31 <rzl> looks like it was all appservers pretty equally
+*20:40 Discuss remediation strategy
+*20:48 Incident officially closed
+*20:51 < rzl> gave cjming all clear to continue with deploy
+*21:29 requestctl rule put in place
+
+==Detection==
+Error was detected by alert manager monitoring
+
+
+20:08 <+jinxer-wm> (ProbeDown) firing: (8) Service text-https:443 has failed probes (http_text-https_ip4) #page - https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown -
+https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+20:08 <+jinxer-wm> (FrontendUnavailable) firing: HAProxy (cache_text) has reduced HTTP availability #page - TODO - https://grafana.wikimedia.org/d/000000479/frontend-traffic?viewPanel=13 - https://alerts.wikimedia.org/?q=alertname%3DFrontendUnavailable
+20:09 <+jinxer-wm> (FrontendUnavailable) firing: varnish-text has reduced HTTP availability #page - https://wikitech.wikimedia.org/wiki/Varnish#Diagnosing_Varnish_alerts - https://grafana.wikimedia.org/d/000000479/frontend-traffic?viewPanel=3 - https://alerts.wikimedia.org/?q=alertname%3DFrontendUnavailable
+
+
+==Conclusions==
+Understanding of legitimate backed traffic would enable us to better sanitize bad traffic at the front end
+
+===What went well?===
+* automated monitoring detected the incident
+* Had a good amount of incident responders
+
+===What went poorly?===
+* Was difficult to get a signature of the post traffic
+
+===Where did we get lucky?===
+* Incident ended quickly on its own
+
+===How many people were involved in the remediation?===
+* SREs
+
+==Links to relevant documentation==
+
+* Grafana: Appservers RED
+
+==Actionables==
+*T309147  any POST that doesn't go to /w/*.php  or /wiki/.* should become a 301 to the same url
+*T309186 Created sampled log of post data
+*T310009 Make it easier to create a new requestctl object
+
+==Scorecard==
+
+
+
+Incident Engagement™  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the incident status section actively updated during the incident?                                             	yes	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	(created retrospectively)
+Process                                       	Are the documented action items assigned?                                                                         	   	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	(similar to "2022-05-20 Database slow / appserver")
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were all engineering tools required available and in service?                                                     	yes	
+Tooling                                       	Was there a runbook for all known issues present?                                                                 	no 	Setting to no as we need to update the DDoS playbook. We have also updated the question from now on to reflect that.
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	7  	

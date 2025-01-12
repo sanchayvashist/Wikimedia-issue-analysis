@@ -1,0 +1,142 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T325890
+| paged-num = 2
+| responders-num = 3
+| coordinators = jayme
+| start = 2022-12-21 09:00:00
+| end = 2022-12-21 09:10:00
+| metrics = No relevant SLOs exist, shellbox latency/php-fpm worker saturation
+| impact = For about 10min syntaxhighlighting was slow or returning errors
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->A sudden spike in requests to shellbox-syntaxhighlight overloaded the service leading to slow response times and increased failures.
+
+The majority of requests where originating from jobrunners and api_appservers.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*09:00 '''OUTAGE BEGINS''' non paging alerts of failing http-api probes and api_appservers running out of idle workers where observed in #mediawiki-operations; Investigation started
+*09:03 paging alert: (ProbeDown) firing: Service shellbox-syntaxhighlight:4014 has failed probes (http_shellbox-syntaxhighlight_ip4)
+*09:05 shellbox-syntaxhighlight req/s increased from ~5 to ~70req/s
+*09:05 shellbox-syntaxhighlight scaled up from 12 to 40 replicas
+*09:09 Alerts recovering
+*09:10 '''OUTAGE ENDS'''
+*09:11 (CirrusSearchJobQueueBacklogTooBig) firing: CirrusSearch job topic eqiad.mediawiki.job.cirrusSearchLinksUpdate is heavily backlogged with 209k messages
+*09:49 cirrusSearchLinksUpdate backlog was cleared
+*09:54 shellbox-syntaxhighlight scaled back to 12 replicas
+
+<!-- Reminder: No private information on this page! -->==Detection==
+[[File:Shellbox-syntaxhighlight grafana.png|thumb|shellbox-syntaxhighlight grafana dashboard]]
+Initially detected by a human spotting alerts on IRC, closely followed by a page.
+
+==Conclusions ==
+
+===What went well?===
+
+* Problem spotted early and countermeasures where taken quickly
+* [[File:Envoy telemetry dashboard.png|thumb|envoy telemetry dashboard]]One of the SREs paged knew how to increase the number of syntaxhighlight runners (it's not mentioned on [[Shellbox]])
+
+===What went poorly?===
+
+* shellbox-syntaxhighlight was probably overloaded by our own services (jobrunners), but currently this is an assumption.
+
+===Where did we get lucky?===
+
+* The burst in requests was rather short
+
+==Links to relevant documentation==
+
+* https://wikitech.wikimedia.org/wiki/Kubernetes/Deployments
+
+==Actionables==
+
+* Figure out what caused the burst (there's a suggestion a template was changed leading to a lot of pages needing re-rendering at once)
+* Document how to scale up shellbox runners? (or link to it from [[Shellbox]])
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|Yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|Yes
+|
+|-
+|Were fewer than five people paged?
+|Yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|Yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|Yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|No
+|no google doc was created, only 3 responders
+|-
+| Was a public wikimediastatus.net entry created? 
+|No
+|
+|-
+|Is there a phabricator task for the incident?
+|Yes
+|
+|-
+|Are the documented action items assigned?
+|No
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|No
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|No
+|While they might not have fully prevented this incident, there are (long) outstanding performance issues with syntaxhighlight: {{PhabT|T271751}}, {{PhabT|T316858}}
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|Yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|Yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|Yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|No
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

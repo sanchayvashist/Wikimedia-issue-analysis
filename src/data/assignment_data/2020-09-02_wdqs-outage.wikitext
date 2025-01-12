@@ -1,0 +1,94 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+Active Wikidata Query Service instances were down (failing readiness probe). Blazegraph "locked up" on affected instances, rendering it unable to complete any work. As a result, queries would time out after exceeding nginx's timeout window without receiving a response from Blazegraph.
+
+'''Impact''': The period of intermittent service disruption occurred between 20:34 and 22:27 UTC, of which about 75% of the time was spent in a state of total outage.
+
+{{TOC|align=right}}
+
+== Timeline ==
+Various Wikidata Query Service instances went down (failing readiness probe). Nodes that were down had errors in their blazegraph logs, and the problem would not spontaneously resolve without intervention.
+
+Behavior was observed to be consistent with one or more “bad queries” triggering deadlocks in Blazegraph, leading to timeouts and therefore service unavailability.
+
+The period of intermittent service disruption occurred between 20:34 and 22:27, of which about 75% of the time was spent in a state of total outage.
+
+---
+
+All relevant actions taken are logged in SAL [https://sal.toolforge.org/production?d=2020-09-02 here] (see topmost part of page)
+
+The timings of when a given public-facing WDQS instance was rendered inoperable can be seen in [https://grafana.wikimedia.org/d/000000489/wikidata-query-service?viewPanel=7&orgId=1&var-cluster_name=wdqs&from=1599078710070&to=1599086198485 this graph] of RDF triple count (no data => node unable to process requests). Note wdqs1* was the passive (backup) datacenter and not being used, thus the outage corresponds to the state of the 4 wdqs2* nodes.
+
+'''All times in UTC.'''
+
+* 20:34 First instance has its Blazegraph rendered unresponsive (per Grafana)
+* 20:42 First critical alert fires and is plumbed through to #wikimedia-operations (note that more than one instance must go down before this alert fires)
+* 20:46 Blazegraph restarted across all affected nodes. This partially restores service for about 3 minutes before all nodes are unresponsive again
+* 21:01 Nginx is restarted on a single instance to test if the problem is isolated to blazegraph. The restart doesn't help, so the problem is confirmed to be blazegraph.
+* 21:09 It's observed that blazegraph logs contain entries indicating blazegraph is receiving malformed queries
+* 21:10 Blazegraph restarted across all affected nodes. This partially restores service for about 8 minutes before all nodes are unresponsive again
+(During this time we worked to identify which agents were responsible for sending malformed queries)
+* 22:08 Suspected user agent responsible for malformed queries has been identified
+(During this time we worked to iteratively test out modified nginx configurations to block the previously identified user agents)
+* 22:26 New nginx configuration has been applied via puppet to the affected nodes, blocking the suspected user agents. nginx is automatically restarted by our puppet automation
+* 22:27 Blazegraph is restarted across all affected servers, restoring full service
+* 22:28 '''Monitoring system indicates full recovery of service availability'''
+
+
+<!-- Reminder: No private information on this page! -->
+
+== Detection ==
+Issue was first detected when a critical alert was issued and plumbed through to IRC:
+
+<code>[2020-09-02 20:42:31] <icinga-wm> PROBLEM - PyBal backends health check on lvs2009 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs2003.codfw.wmnet, wdqs2007.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs-ssl_443: Servers wdqs2003.codfw.wmnet, wdqs2007.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs_80: Servers wdqs2003.codfw.wmnet, wdqs2007.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but 
+</code>
+
+Alert volume was manageable and fairly clearly indicated the problem (too many nodes were down in order to maintain full availability). Alert could perhaps explicitly show the connection between "nodes are marked down but not pooled" and "the aforementioned is occurring because too many nodes are down".
+
+== Conclusions ==
+See [https://wikitech.wikimedia.org/wiki/Incident_documentation/20200723-wdqs-outage#Conclusions previous incident's conclusions] for some general context on our service expectations.
+
+Note that compared to the last incident, we identified the problematic queries as being specifically malformed queries (leading to MalformedQueryExceptions getting raised). In the previous incident, it was non-performant but not malformed queries that appeared to cause the deadlock.
+
+=== What went well? ===
+* Automated monitoring detected incident quickly
+* Many SREs made themselves available to help triage and troubleshoot
+* Prior experience with "query of death" incidents increased the speed with which we honed in on the correct hypothesis
+* As a result of the above, we avoided taking actions (such as cutting over to our backup datacenter) which would have not helped
+
+=== What went poorly? ===
+* Difficulty in visualizing / counting / surfacing logs pertaining to queries that were a *cause* of the problem as opposed to second-order effects
+* Kibana, a frontend to Elasticsearch, is very helpful in these kinds of scenarios, but extreme lag in the graphical interface for adding filters slowed us down significantly
+
+=== Where did we get lucky? ===
+* incident occurred when knowledgeable people were available to assist
+* we were able to use our existing logs, etc to identify potential "culprit"
+
+=== How many people were involved in the remediation? ===
+* Several SREs from various teams
+
+=== What uncertainties do we still have? ===
+There is generally a background rate of malformed queries that we receive, yet normally Blazegraph throws an exception but doesn't go into a tailspin.
+
+Is it a matter of volume - a sufficient quantity of these malformed queries causes issue? Or a specific type of malformed query?
+
+Banning the specific user agent (technically multiple UAs but they all belonged to the same entity) led to a complete resolution of the problems (following blazegraph restart of course). Does this mean that we correctly identified the culprit, or would having banned another agent responsible for significant numbers of these malformed queries have also fixed the problem (this would imply the issue relates more to total volume of malformed queries)?
+
+== Links to relevant documentation ==
+General service documentation lives [https://wikitech.wikimedia.org/wiki/Wikidata_query_service here] and in the [[Wikidata_query_service/Runbook|WDQS Runbook]].
+
+[https://grafana.wikimedia.org/d/000000489/wikidata-query-service?orgId=1&from=1595524221587&to=1595531775603&var-cluster_name=wdqs Grafana dashboard for public-facing WDQS service]
+
+[[Incident_documentation/20200723-wdqs-outage|Previous 20200723 incident which was very similar]]
+
+== Actionables ==
+
+* (Carried over from last incident) {{phab|T258754|}} Define SLOs, error budget for WDQS
+* {{phab|T262002}} Improve visibility into blazegraph queries causing errors
+* {{phab|T262009}} Add an entry in the WDQS Runbook on killer queries

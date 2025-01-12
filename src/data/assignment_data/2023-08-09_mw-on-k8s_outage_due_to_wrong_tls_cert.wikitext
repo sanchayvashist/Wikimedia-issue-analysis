@@ -1,0 +1,144 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = 
+| paged-num = 2
+| responders-num = jynus, jayme
+| coordinators = -
+| start = 2023-08-09 11:41
+| end = 2023-08-09 12:16
+| metrics = Mediawiki web and api availability
+| impact = For approximately 30 minutes 1% of traffic received errors (120 requests/s)
+}}A change to the global k8s defaults was merged that made the next mediawiki on kubernetes deployment pick up a wrong certificate for TLS termination. {{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+*09:37 A change to the global k8s defaults got merged, switching to cert-manager certificates for supported charts (this is what caused the issue later on)
+*11:41 deployment of mw config change https://sal.toolforge.org/log/fswa2okBGiVuUzOdKxgQ
+*11:41 '''OUTAGE BEGINS'''
+*11:46 <code><jinxer-wm> (KubernetesAPILatency) firing: High Kubernetes API latency (POST pods) on k8s@codfw - https://wikitech.wikimedia.org/wiki/Kubernetes - https://grafana.wikimedia.org/d/000000435?var-site=codfw&var-cluster=k8s - https://alerts.wikimedia.org/?q=alertname%3DKubernetesAPILatency</code>
+*11:47 <code><jinxer-wm> (ProbeDown) firing: (2) Service mw-api-ext:4447 has failed probes (http_mw-api-ext_ip4) #page  - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown</code> /  <code><jinxer-wm> (ProbeDown) firing: Service mw-api-int:4446 has failed probes (http_mw-api-int_ip4) - https://wikitech.wikimedia.org/wiki/Runbook#mw-api-int:4446 - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown</code>
+*11:56 <jayme> jynus: I think it's k8s related, let me check something
+*11:58 Issue was identified and a patch prepared https://gerrit.wikimedia.org/r/947331
+*12:08 Re-deploy of mediawiki deployments started
+*[[File:Ats backend errors.jpg|thumb|ATS backend errors]]12:16 '''OUTAGE ENDS'''
+*12:17 <code><jinxer-wm> (ProbeDown) resolved: (6) Service mw-api-ext:4447 has failed probes (http_mw-api-ext_ip4) #page  - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown</code> / <code><jinxer-wm> (ProbeDown) resolved: (6) Service mw-api-ext:4447 has failed probes (http_mw-api-ext_ip4)  - https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=All - https://alerts.wikimedia.org/?q=alertname%3DProbeDown</code>
+
+==Detection==
+The issue was detected by a page:
+
+ (ProbeDown) firing: (6) Service mw-api-ext:4447 has failed probes (http_mw-api-ext_ip4)
+ (ProbeDown) firing: Service mw-api-int:4446 has failed probes (http_mw-api-int_ip4)
+
+There was also secondary failures:
+
+ [12:51] <jinxer-wm> (KubernetesAPILatency) resolved: (4) High Kubernetes API latency
+
+ [12:02] <icinga-wm> PROBLEM - Check unit status of httpbb_kubernetes_mw-api-int_hourly on cumin2002 is CRITICAL
+
+==Conclusions ==
+
+===What went well?===
+
+* The root of the problem could be detected quickly because the person that issued the breaking change was a responder
+*
+
+===What went poorly?===
+
+* The root cause should have been visible CI (unfortunately not in the CI of the repo the change was made in; hieradata vs. deployment-charts)
+
+=== Where did we get lucky? ===
+
+* Only 1% of traffic is routed to k8s currently, so there was only limited impact
+
+==Links to relevant documentation==
+
+* …
+
+==Actionables==
+
+* Because of the low traffic (relatively small amount of errors) it took some time to pin this to k8s- does that need some actionables, or will it resolve itself as k8s becomes the majority of requests?
+* Review if some deployment procedures/testing should be strengthen (e.g. surprising changes on next deployment, canary deployment for k8s, etc)
+* Some metrics become unavailable or unhealthy during deployment- could something be done about that (either for the metrics or mitigation of deployment impact)
+* Should depooling k8s have been done earlier?
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|no google doc
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|no
+|
+|-
+|Are the documented action items assigned?
+|yes
+|no action items
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,122 @@
+
+
+== Summary ==
+
+
+For approximately 24 minutes, uncached calls to the API on the eqiad datacenter overloaded the application servers, running out of threads (all busy) creating unreasonable latency or failing to respond to requests. This caused sending errors to some clients using the action API and Parsoid in the primary datacenter. Elevated latencies persisted for the following 3 hours, when traffic load organically went down.
+
+This was caused by the DiscussionTools MediaWiki extension adding a ResourceLoader module on almost all page views -even non-discussion pages- which created an API call, that, combined with a significant 50% increase in overall traffic, led to an overload and increased latencies on the API cluster. codfw app server cluster was mostly unaffected due to not receiving POST uncached traffic at the time (it is read-only).
+
+
+
+==Timeline==
+
+
+
+
+
+
+
+
+All times in UTC.
+
+=== 8 December 2022 ===
+
+* 22:17 <samtar@deploy1002> Started scap: Backport for Start mobile DiscussionTools A/B test (T321961) High traffic is observed (retroactively, on the 19th) to action=discussiontoolspageinfo, with a daily peak of around 2k req/s.
+
+=== 18 December 2022 ===
+*17:55 Argentina scores the penalty that awards their national team the World Cup. A 50% traffic increase starts (we had larger spikes in the past, though, causing no load issues)
+*17:58 API app servers get overload with requests OUTAGE STARTS HERE
+*17:59 4 pages are sent: PHPFPMTooBusy (api_appserver & parsoid) / FrontendUnavailable (HAProxy & varnish)
+*18:XX Thinking it is load related, a restart is considered not the right move at the moment
+*18:20 App servers are attempted to be restarted in a desperate attempt to fix something, failing END (FAIL) - Cookbook sre.mediawiki.restart-appservers (exit_code=99)
+*18:22 Load goes down enough for worker threads to not be 100% busy OUTAGE ENDS (but degraded state with increased latencies persist)
+*18:55 A rolling restart is finally run to try to improve the latency issues: sudo cumin -b 1 -s 30 'A:mw-api and A:eqiad' 'restart-php7.4-fpm'
+*19:31 Rolling restart finishes, latencies still high
+*19:42 DiscussionTools is suspected to be the culprit based on utilization metrics, but there is no one around to debug
+*19:46 Latencies -due to organic traffic reduction, not to any action taken- decrease to a degraded, but not outage-like state. It is decided to set the ongoing outage as "resolved" and ask for debugging help the following day.
+
+=== 19 December 2022 ===
+*03:08 tstarling@deploy1002: Synchronized wmf-config/InitialiseSettings.php: disable wgDiscussionToolsABTest   (duration: 15m 23s)
+*09:15 ladsgroup@deploy1002: Finished scap: Backport for Emergency: discussiontoolspageinfo return empty response in non-talk ns (T325477) (duration: 09m 24s)
+*10:28 taavi@deploy1002: Finished scap: Backport for Only preload getPageData if there's thread data for the page (T325477) (duration: 07m 58s)
+(any one of these three patches would have resolved the issue)
+
+==Detection==
+
+Monitoring and paging worked as intended, paging everybody (it was a weekend) as soon as the issue become major at 17:56:
+
+* 17:59 Service: [FIRING:1] ProbeDown (10.2.2.22 ip4 api-https:443 probes/service http_api-https_ip4 ops page eqiad prometheus sre)
+* 18:00 Service: [FIRING:1] PHPFPMTooBusy api_appserver (ops php7.4-fpm.service page eqiad prometheus sre)
+* 18:00 Service: [FIRING:1] FrontendUnavailable (varnish-text page thanos sre)
+* 18:01 Service: [FIRING:1] FrontendUnavailable cache_text (page thanos sre)
+
+A task was created also by a community member at 19:03, when the team was already analyzing the issue.
+
+However, there were reports that "php fpm busy has been flapping all weekend, just not enough to page".
+
+==Conclusions ==
+
+OPTIONAL: General conclusions (bullet points or narrative)
+
+===What went well?===
+
+* Multiple people reacted to page although it was during World Cup finals
+* Good insights with monitoring helped in pinpointing DiscussionTools as potential incident cause and World Cup traffic as the modulator
+
+OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc
+
+===What went poorly?===
+
+* Traffic spike due to World Cup was quite a surprise although the event was scheduled beforehand for month
+* Knowledge and documentation of sre.mediawiki.restart-appservers cookbook (SERVICE name unknown). It took a while to find the cumin + "restart-php7.4-fpm" approach
+* Increased load following the 8 December deployment was not noticed or not connected to the deployment
+* Outage was caused by a known problem documented in a TODO comment T325477#8476954
+
+OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc
+
+===Where did we get lucky?===
+
+* Traffic declined naturally and incident resolved automatically
+* DoS between 18:17 and 18:36 had no big impact on performance(?), rate limiting worked(?)
+
+OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc
+
+==Links to relevant documentation==
+
+Service restarts#Application servers (also image/video scalers and job runners and parsoid)
+
+Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.
+
+==Actionables==
+*  Fix sre.mediawiki.restart-appservers cookbook and doc 
+* Patch  
+* Patch  
+* : Avoid uncached action=discussiontoolspageinfo API calls on page load 
+*  
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	no 	SRE had no insight into existence of the DiscussionTools ongoing A/B Test
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	yes	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	yes	https://www.wikimediastatus.net/incidents/2w4ygdj4vc20
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	T325477
+Process                                       	Are the documented action items assigned?                                                                         	yes	see above also completed so this incident doesn't repeat
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	Outage was caused by a known problem documented in a TODO comment T325477#8476954
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	runbook failed
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	8  	

@@ -1,0 +1,160 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T331626
+| paged-num = 0
+| responders-num = 6?
+| coordinators = n/a
+| start = 2023-03-07 14:35:31
+| end = 2023-03-09 16:02:59
+| metrics = No relevant SLOs exist
+| impact = For 2 days, Mailman did not deliver any mail, affecting public and private community, affiliate, and WMF mailing lists
+}}
+
+<!-- Reminder: No private information on this page! -->During network maintenance, the Mailman runner process for delivering emails out of the queue crashed because it couldn't connect to the MariaDB database server and was not automatically restarted. As a result, Mailman continued to accept and process incoming email, but outgoing mail was queued. This was first reported in [[phab:T331626|T331626]], via [[mw:Git/Reviewers|Gerrit Reviewer Bot]] being broken. It was determined that the mediawiki-commits list was not delivering mail, leading to discovery of a growing backlog of 4k queued outgoing emails in Mailman. The <code>mailman3</code> systemd service was restarted, causing all of the individual runner processes to be restarted, including the "out" runner, which began delivering the backlog. It took slightly over 5 hours for the backlog to be cleared.
+
+The network maintenance in question was [[phab:T329073|T329073: eqiad row A switches upgrade]]. <code>lists1001.wikimedia.org</code> (the Mailman server) was not listed on the task but it was affected and downtimed (see [[phab:T329073#8672655|T329073#8672655]]). icinga monitoring correctly detected the issue (see [[phab:T331626#8680354|T331626#8680354]]), but was not noticed by humans.
+
+==Timeline==
+''All times in UTC.''
+
+*2023-03-07
+**14:09: lists1001 and 237 other hosts downtimed for switches upgrade ([[phab:T329073#8672655|T329073#8672655]])
+**14:20ish: network maintenance happens
+**14:35: "out" runner crashes '''OUTAGE BEGINS''' (see [[phab:T331626#8681134|stack trace]])
+**14:43: <+icinga-wm> PROBLEM - mailman3_runners on lists1001 is CRITICAL: PROCS CRITICAL: 13 processes with UID = 38 (list), regex args /usr/lib/mailman3/bin/runner <nowiki>https://wikitech.wikimedia.org/wiki/Mailman/Monitoring</nowiki>
+*2023-03-09
+**13:29 kostajh files [[phab:T331626|T331626: reviewer-bot is not working]]
+**14:24 valhallasw says no email is coming in via the mediawiki-commits@ mailing list
+**15:15 JJMC89 files [[phab:T331633|T331633: Not receiving posts or moderation messages]], "The last message I received was at 7 Mar 2023 11:18:24 +0000, but I can see posts after that in list archives."
+**15:53 hashar posts about the large out queue backlog in Mailman: [[phab:T331626#8680273|T331626#8680273]] 
+**16:03 marostegui restarts <code>mailman3</code> systemd service, the out runner begins processing the queue
+**18:40 legoktm sends [[listarchive:list/listadmins@lists.wikimedia.org/message/5UYLM2TGOMF4P6KABZE6Q2BXTIR4MQ53/|notification]] to listadmins@ mailing list
+**23:34 out queue reaches zero '''OUTAGE ENDS'''
+
+==Detection==
+Automated monitoring was the first to detect the issue, less than 10 minutes after the runner crashed:
+
+14:43: <+icinga-wm> PROBLEM - mailman3_runners on lists1001 is CRITICAL: PROCS CRITICAL: 13 processes with UID = 38 (list), regex args /usr/lib/mailman3/bin/runner <nowiki>https://wikitech.wikimedia.org/wiki/Mailman/Monitoring</nowiki>
+
+The correct alert fired, as it explicitly checks that the expected number of runner processes are actually running.
+
+However, it was not investigated until a human reported it, nearly 2 days later.
+
+==Conclusions ==
+
+===What went well?===
+
+*Automated monitoring correctly identified the issue pretty quickly
+
+===What went poorly?===
+
+* lists1001 was not marked as part of the row A switch upgrade so the service maintainers (term used loosely) weren't explicitly aware
+** We typically send potential downtime notifications ([[listarchive:list/listadmins-announce@lists.wikimedia.org/thread/SEKW3AHXBPB4NSR6EC7S7MC4P46KWG7I/|example]]) to listadmins when we know maintenance is expected.
+* No human noticed the alerting
+** The web service on lists1001 is often flaky, causing alerts that automatically recover so people may have begun to tune out the alerts.
+** Also there were a lot of alerts at that time because of multiple ongoing maintenance things, so it was also probably lost in the noise.
+* We don't actually monitor the size of the out queue (see [[gerrit:plugins/gitiles/operations/puppet/+/refs/heads/production/modules/icinga/files/check_mailman_queue.py#28|script]]) because historically it did grow very large. We probably should, things are also much calmer these days.
+* Amir was on vacation
+
+===Where did we get lucky?===
+
+*Didn't get lucky
+
+==Links to relevant documentation==
+
+* [[Mailman/Monitoring]]
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+*Identify how lists1001 got missed during the eqiad row A switch upgrade preparation
+*Add monitoring to out queue size
+*Consider making the runner crashed monitoring page? If a runner crashes, it definitely needs manual intervention. And crashes are much much rarer than during the initial MM3 deployment. 
+*Someone should probably figure out why lists1001's web service is flaky and randomly going down
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|{{phab|331626}}
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|IRC alert sent but not noticed
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

@@ -1,0 +1,170 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T335406
+| paged-num = 0
+| responders-num = 1
+| coordinators = Filippo Giunchedi, Andrea Denisse
+| start = 2023-05-05 00:04:00
+| end = 2023-05-05 08:15:00
+| impact = Prometheus was down in ulsfo and eqsin for 8 hours
+}}
+
+=== Summary ===
+
+# Two Prometheus instances were updated from Buster to Bullseye.
+# The services were not working as expected in two data centers.
+# The Bullseye instances were down for 8 hours, causing loss of observability in two data centers.
+# The cause of the issue was identified as a corrupted WAL and/or "chunks_heads" directory after synchronization.
+# The team investigated the issue and found that the corrupted files were preventing the Prometheus instances from starting up properly.
+# The corrupted files were deleted, and Prometheus was restarted.
+# The team monitored the services to ensure they were working as expected and observability was restored.
+
+===== Hypothesis: =====
+A race condition may have prevented the Prometheus process from shutting down gracefully in the Buster host, leading to corrupted files being written to disk and then copied to the Bullseye host<!-- Reminder: No private information on this page! -->
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+Step by step outline of what happened:
+
+'''May 2, 2023'''
+
+'''16:00''' Data is synchronized from prometheus4001 to prometheus4002 for a Bullseye upgrade
+
+'''16:43''' Failover DNS from prometheus5001 to prometheus5002 in ulsfo [Patch #913194] 
+
+'''21:00''' prometheus4002 prometheus@ops[2098503]: level=error ts=2023-05-02T21:00:04.686Z caller=db.go:745 component=tsdb msg="compaction failed" err="WAL truncation in Compact: get segment range: segments are not sequential
+
+'''May 4, 2023'''
+
+'''23:00''' Data is synchronized from prometheus5001 to prometheus5002 for a Bullseye upgrade
+
+'''May 5, 2023'''
+
+'''00:27 Outage starts:''' Failover DNS from prometheus5001 to prometheus5002 in eqsin [Patch #913196]
+
+'''01:32''' [https://sal.toolforge.org/log/KemJ6YcBGiVuUzOdxAE0 denisse@cumin1001: END (PASS) - Cookbook sre.ganeti.reboot-vm (exit_code=0) for VM prometheus4002.ulsfo.wmnet]
+
+'''01:39''' [https://sal.toolforge.org/log/O0eQ6YcBxE1_1c7sEyUW denisse@cumin1001: END (PASS) - Cookbook sre.ganeti.reboot-vm (exit_code=0) for VM prometheus5002.eqsin.wmnet]
+
+'''08:15''' godog: delete wal and chunks_head from prometheus5002 and prometheus4002 to let prometheus start back up and not crashloop 
+
+'''08:15 Outage ends'''
+
+[[File:Datacenter-overview-ulsfo.png|thumb|590x590px|Datacenter overview of ulsfo showing the loss of visibility during the time Prometheus was down https://grafana.wikimedia.org/goto/IEjpsQy4k]]
+[[File:Datacenter-overview-eqsin.png|thumb|592x592px|Datacenter overview of eqsin showing the loss of visibility during the time Prometheus was down https://grafana.wikimedia.org/goto/K4NNywy4k]]
+
+==Detection==
+Automated monitoring detected the alert but a human noticed the outage and triaged it with the alert.
+
+==Conclusions ==
+
+To prevent similar incidents from happening in the future, the team reviewed their upgrade and alerting procedures to ensure that all necessary checks and tests are performed before updates are applied in production.
+
+===What went well?===
+
+* Automated monitoring detected the incident
+
+===What went poorly?===
+
+* Log level for alerts indicating that Prometheus may be down could be increased to CRITICAL.
+* No paging for Prometheus down
+
+===Where did we get lucky?===
+
+* No incidents happened at the same time.
+
+==Links to relevant documentation==
+
+* [[labsconsole:Prometheus#Sync_data_from_an_existing_Prometheus_host|Sync data from an existing Prometheus host]]
+
+==Actionables==
+
+* ThanosCompactHalted error on overlapping blocks. Find and nuke the non-aligned blocks. [[phab:T335406|T335406]]
+* Ensure that the replica label is set for all Prometheus hosts. Make puppet fail when replica=unset. [[phab:T335406|T335406]]
+* Alert when no data is received from Prometheus in a certain amount of time. [[phab:T336448|T336448]]
+* Update the migration procedure on Wikitech. [[phab:T309979|T309979]]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

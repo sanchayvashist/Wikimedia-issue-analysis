@@ -1,0 +1,119 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+==Summary and Metadata==
+{| class="wikitable"
+|'''Incident ID'''
+|2021-10-25 s3 db recentchanges replica
+| '''UTC Start Timestamp:'''
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''Incident Task'''
+|Phabricator Link
+| '''UTC End Timestamp''' 
+|YYYY-MM-DD hh:mm:ss
+|-
+|'''People Paged'''
+|<amount of people>
+|'''Responder Count'''
+|<amount of people>
+|-
+|'''Coordinator(s)'''
+|Names - Emails
+|'''Relevant Metrics / SLO(s) affected'''
+|Relevant metrics
+% error budget
+|-
+|'''Summary:'''
+| colspan="3" |
+* For ~30min (from 18:25 until 19:06) average HTTP GET latency for mediawiki backends was higher than usual.
+* For ~12 hours, database replicas of many wikis were stale for Wikimedia Cloud Services such as Toolforge.
+|}The s3 replica (db1112.eqiad.wmnet) that handles recentchanges/watchlist/contributions queries went down, triggering an icinga alert for the host being down, and a few minutes later an alert for increased appserver latency on GET requests. Confusion over the role of db1112, as it's also the s3 sanitarium master, didn't appropriately recognize the severity. Only while investigating the latency alerts was it realized that the database server was down, leading it to be depooled and restarted via mgmt. Once the host came back, a page was sent out. The incident was resolved by pooling a different s3 replica in its place.
+
+s3 replication to WMCS wikireplicas was broken until it was restarted at 2021-10-26 09:15. s3 is the default database section for smaller wikis, which currently accounts for 92% of wikis (905/981 wikis). 
+
+'''Impact''':
+
+* For ~30min (from 18:25 until 19:06) average HTTP GET latency for mediawiki backends was higher than usual.
+* For ~12 hours, database replicas of many wikis were stale for Wikimedia Cloud Services such as Toolforge.
+
+== Actionables ==
+* [[phab:T294490|T294490]]: db1112 being down did not trigger any alert that paged until the host was brought back up (we get paged for replication lag but not for host down, Marostegui said for DB hosts we should start paging on HOST down which we normally don't do. This would require a puppet change.)
+
+== Scorecard ==
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|Info not logged, scoring 0
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|No page
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|No page
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|No page
+|-
+! rowspan="5" |Process 
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+| Was the public status page updated? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+| Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|Monitoring did detect, although without paging severity (note: severity for related alert was increased after this incident)
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|6
+|
+|}

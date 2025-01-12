@@ -1,0 +1,157 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+{{Incident scorecard
+| task = T299965
+| paged-num = 
+| responders-num = 
+| coordinators = 
+| start = 
+| end = 
+| impact = For 9 months, editors were entirely unable to upload large files (e.g. on Wikimedia Commons). The UploadWizard feature, and other upload tools, displayed generic error messages about this failure, typically after a timeout was reached. Editors reportedly gave up, or sacrificed image, video, and document quality (which provides a poorer user experience to readers), or resorted to manual "server-side upload" requests (which demanded additional sysadmin time during these months).
+}}
+Since the upgrade of MediaWiki appservers to Debian Buster early in 2021, large file uploads (anecdotally anything over 300MB) have been failing because of timeouts when uploading the file to Swift cross-datacenter (all uploads are sent to both primary [[Clusters|datacenters]]). The cause was determined to be the libcurl upgrade enabling HTTP/2 by default, which is generally slower at these kinds of transfers than HTTP/1.1 or HTTP/1.0 is (see [https://blog.cloudflare.com/delivering-http-2-upload-speed-improvements/ this Cloudflare blog post] for a brief explainer). Forcing internal requests from MediaWiki PHP to Swift to use HTTP/1 immediately resolved the issue. We have since also disabled HTTP/2 more generally in the internal Nginx proxy we use for TLS termination to Swift. The nginx puppet code we used here was originally written for [[MediaWiki at WMF|public traffic TLS]] termination (this now uses ATS), which explains why it had HTTP/2 enabled.{{TOC|align=right}}
+
+==Timeline==
+
+*Feb 11: [[phab:T274589|T274589: No atomic section is open (got LocalFile::lockingTransaction) filed]] 
+*Feb 25: [[phab:T275752|T275752: Jobrunner on Buster occasional timeout on codfw file upload]] filed
+*March 1: Link between file timeouts and buster migration identified (or at least theorized)
+*mid-March: video2commons is unblocked by YouTube, and people attempt to upload large files at a much higher rate than before
+*Late March-early April: One jobrunner is temporarily reimaged back to stretch and it appears to not show the same timeout symptoms.
+*April 13: [https://commons.wikimedia.org/w/index.php?title=Commons%3AMaximum_file_size&type=revision&diff=552419451&oldid=552148334 Help:Maximum file size on Commons edited] to say that files over 100MB need a server-side upload (discussion ensues on the talk page)
+*mid-April: Remaining servers reimaged to buster, including that one jobrunner.
+*Oct. 11: [[phab:T275752#7418759|priority raised to high]], with this being the most likely cause of failing uploads 
+*... slow progress in figuring out a reproducible test case
+*Oct. 27: [https://lists.wikimedia.org/hyperkitty/list/wikimedia-l@lists.wikimedia.org/message/2UARCU7VH27P7URI7YVS5QQRXHAVNRBQ/ <nowiki>[Wikimedia-l] Upload for large files is broken</nowiki>]
+*Oct. 28: A reproducible test case shows that from the same host, the CLI curl command works fine, while PHP via libcurl does not
+**libcurl is transferring data using very small requests, causing lots of round-trips which add up for cross-datacenter requests
+**[[phab:T275752#7467700|It's noticed]] that CLI curl is using HTTP/1, while PHP is using HTTP/2. Forcing PHP to use HTTP/1 fixes the issue.
+**It is identified that:
+***libcurl 7.62.0 enabled HTTP/2 multiplexing when available, which arrived as part of the Buster upgrade (7.52.1 to 7.64.0)
+***A prerequisite of above was to also [https://curl.se/mail/lib-2018-07/0027.html switch by default to HTTP/2] when available.
+**Patches to force SwiftFileBackend's MultiHttpClient to use HTTP/1 are submitted 
+*Oct. 29: Patches are deployed, large file uploads being working again, at a much faster/expected speed
+*Nov. 2: HTTP/2 disabled on nginx instances that provide TLS termination in front of Swift
+*Nov. 8: HTTP/2 disabled on remaining nginx instances that use the tlsproxy::localssl Puppet role.
+
+==Detection==
+The issue was first detected as a train blocker because the timeouts were causing database query errors on the MediaWiki side. Further manual investigation discovered the timeouts in MediaWiki/Swift communication.
+
+In this specific case, alerting would not have helped given that the issue was noticed almost immediately, there was just no one actively looking into it for a significant amount of time.
+
+For the general case, having metrics about throughput of uploads to Swift for large files and alerting (non-paging) based on that average might be useful (see actionables).
+
+==Conclusions==
+===What went well?===
+*Once the underlying issue was identified (use of HTTP/2), we were able to prepare patches right away and deploy them in less than a day.
+
+===What went poorly?===
+*There is no owner for MediaWiki backend multimedia work, leaving this to languish for months. In the course of this investigation, many other bugs were found and filed, but there is no one to work on them.
+*The errors emitted to users when uploads fail are vague and not helpful, leading to user frustration and many duplicate issues.
+**Users also did not know which component to use, so bugs ended up scattered across MediaWiki-Uploading, MediaWiki-File-management and SRE-swift-storage.
+*Chunked uploads use and were failing during the job queue, which is much harder to debug in production because it can't be routed to mwdebug* like web requests can.
+
+===Where did we get lucky?===
+*We were able to reproduce the issue using plain PHP+curl via a script that extracted the useful parts of MultiHttpClient and SwiftFileBackend
+*Pasting verbose traces onto Phabricator allowed a volunteer to spot the use of HTTP/2 when it was not intended
+
+===How many people were involved in the remediation?===
+*~4 SREs
+*~3 software engineers
+*Special thanks to [[m:User:Xover|Xover]] who noticed the use of HTTP/2 and the corresponding change in libcurl, plus [[meta:User:Inductiveload|Inductiveload]] who helped with reproduction and testing once it was fixed.
+
+==Links to relevant documentation==
+
+* [[Swift/How To]] is marked as outdated and would be more useful if it explained how to use the Python Swift client to upload files to Swift, as well as had designated test users and buckets. Or maybe recommend to use test.wikipedia.org's buckets.
+* As far as I know there is no detailed infographic or even text that explains how the MediaWiki chunked upload process works. Broadly users upload chunks, they get reassembled on a job runner, and then eventually published. Some steps result in actual uploads, others use Swift's x-copy-from. Some parts use temporary names, others use the actual filename. Also everything is uploaded to both DCs, but not in parallel.
+
+==Actionables==
+'''The biggest issue identified here is needing a maintainer/owner for backend file upload/management related components.'''
+
+* There is a general need for better metrics collection and logging of the individual actions in SwiftFileBackend.
+
+* [[phab:T283045|T283045: LocalFile::lock() rearchitecting]] - don't hold a database transaction open for the duration of the upload
+* [[phab:T295008|T295008: MediaWiki uploads files to Swift in eqiad and codfw in serial, not parallel]]
+*[[phab:T295482|T295482: Track throughput of large file uploads to Swift]]
+* [[gerrit:735433|Log headers in MultiHttpClient]]
+=Scorecard =
+Read more about [[Incident Scorecard]].
+{| class="wikitable"
+!
+!Question
+! Score
+!Notes
+|-
+! rowspan="5" | People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|This is an unusual incident involving many people over 9 months
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|No page
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|0
+|Task was updated, but incident docs were created after resolving the issue
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|Issue was eventually given high priority, but wasn't considered UBN. troubleshooting status was logged in task, and incident status was updated after resolution
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|Some, some are not
+|-
+| Is this a repeat of an earlier incident (score 0 for yes, 1 for no) 
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no) 
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|No tooling issues were reported, although communication was slow due to unclear ownership
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|Yes
+|-
+| Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" | Total score
+|3
+|
+|}

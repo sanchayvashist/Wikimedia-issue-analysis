@@ -1,0 +1,74 @@
+
+
+== Summary ==
+
+
+
+
+==Timeline==
+All times in UTC.
+
+*2024-03-27 21:34:03 2024 Brian King (Search Platform SRE) merges a puppet patch that removes omega masters in preparation for decom. Once Puppet is run, soon-to-be-decommed master hosts are firewalled off from the cluster, making it impossible for them to participate in leader election.
+*2024-03-27 21:45:42 Brian King (Search Platform SRE) runs sre.hosts.decommission cookbook for elastic2037-2054.
+*~2024-03-27 22:00  Ryan Kemper (Search Platform SRE) notices a "master not discovered exception" (503) from the CODFW omega endpoint
+*2024-03-27 23:04:41,721 realizing the problem is related to decom work, Brian types "abort" into the cookbook prompt. It stops the network change that it was displaying, but it continues to wipe the disk of one of the active masters (elastic2052).
+*After several attempts to fix cluster state, Brian, Ryan, and Erik (Search Platform SWE) decide to depool CODFW omega and reconvene the next day.
+*~Wed Mar 27 23:59 2024 Patch is merged to force omega traffic to eqiad; impact ends
+*Thurs Mar 28 1300 UTC CODFW Brian restores quorum to the cluster using this procedure
+*TBA CODFW omega repooled (depends on this patch being merged/deployed)
+
+==Detection==
+Humans noticed the problem immediately, as it was directly caused by operator error.
+
+No alerts had time to fire.
+
+==Conclusions ==
+
+===What went well?===
+
+* Humans noticed the problem immediately and were able to mitigate it.
+
+===What went poorly?===
+
+* Unexpected cookbook behavior
+* Too many hosts decommissioned at once, should probably have broken these up into batches.
+
+===Where did we get lucky?===
+
+* The problem only affected a small cluster in the inactive datacenter.
+
+==Links to relevant documentation==
+
+* Search#Cluster Quorum Loss Recovery Procedure
+* Search#Adding new masters/removing old masters
+
+==Actionables==
+
+* Update docs (done, see "relevant documentation" section above)
+* All other action items listed in https://phabricator.wikimedia.org/T361288
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	N 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	Y 	
+People                                        	Were fewer than five people paged?                                                                                	Y 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	NA	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	NA	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	NA	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	NA	
+Process                                       	Is there a phabricator task for the incident?                                                                     	Y 	
+Process                                       	Are the documented action items assigned?                                                                         	Y 	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	Y 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	N 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	Y 	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	NA	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	Y 	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	N 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	7 	

@@ -1,0 +1,113 @@
+
+
+== Summary ==
+
+
+ESAMS DC was unreachable by users. Globally, we experienced a request drop from ~150k req/s to ~91k req/s as outlined in the Grafana dashboard. Users that were trying to reach Amsterdam DC experienced network errors and delays.
+
+The incident doc still mentioned "We’re still investigating why some Grafana panels shows ~1hr of requests drop instead of ~10m (the actual incident duration)"
+
+
+
+==Timeline==
+
+* 14:03 <XioNoX> !log reboot fpc0 on cr1-esams - T346779 (SAL)
+* 14:04 <XioNoX> I restarted the linecard on the wrong router… Outage starts
+* 14:05 Start receiving alerts, e.g. <+icinga-wm> PROBLEM - Host ncredir3003 is DOWN: PING CRITICAL - Packet loss
+* 14:06 <vgutierrez> let's depool esams?
+* 14:07 <jynus> vgutierrez: it is recovering now
+* 14:07 <XioNoX> looks like it's back faster than a depool is needed
+* 14:08 <vgutierrez> I can't reach text-lb.esams.wikimedia.org from here FWIW
+* 14:08 depool esams https://gerrit.wikimedia.org/r/c/operations/dns/+/974537/
+* 14:08 DEPOOL FAILED due to authends-update issues
+* 14:09 <+icinga-wm> started to see recoveries RECOVERY
+* 14:09 <sukhe> /tmp/dns-check.rudydea2/zones/netbox/4.64.10.in-addr.arpa
+* 14:09 <sukhe> we need to fix this to fix authdns-update
+* 14:10 <topranks> let's just merge https://gerrit.wikimedia.org/r/c/operations/dns/+/974534
+* ??:?? <XioNoX> text-lb is reachable again
+* 14:11 <jynus> NEL is still high
+* 14:16 marostegui updates the status page
+* 14:17 <jynus> http traffic volume is still elevated, though
+* 14:18 <jynus> others parameters look back to normal, including NEL timeouts
+* 14:21 <+jinxer-wm> (NELHigh) resolved: (2) Elevated Network Error Logging events Outage ends
+* 14:25 Updated status page to monitoring
+* 14:26 Incident opened; fabfur becomes IC.
+* 14:35 Status page set to resolved
+
+
+2023-11-15 esams unreachable - NEL.png
+2023-11-15 esams unreachable - varnish.png
+2023-11-15 esams unreachable - webreqs.png
+
+
+* Network Error Logging
+* Webrequests live dashboard
+
+==Detection==
+The outage was detected by an SRE shortly after an accidental change. Fired alerts confirmed the outage as well:
+
+
+<+icinga-wm> PROBLEM - Host ncredir3003 is DOWN: PING CRITICAL - Packet loss
+
+
+Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?
+
+==Conclusions ==
+
+OPTIONAL: General conclusions (bullet points or narrative)
+
+===What went well?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc
+
+===What went poorly?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc
+
+===Where did we get lucky?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc
+
+==Links to relevant documentation==
+
+* Depooling servers
+
+==Actionables==
+
+* …
+
+Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.
+
+Add the #Sustainability (Incident Followup) and the #SRE-OnFire  Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	   	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	   	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	   	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	   	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	   	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	yes	Status page entry
+Process                                       	Is there a phabricator task for the incident?                                                                     	   	
+Process                                       	Are the documented action items assigned?                                                                         	   	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	   	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	no 	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	yes	Relevant runbook
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	   	

@@ -1,0 +1,164 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T367113
+| paged-num = 0
+| responders-num = 3
+| coordinators = 
+| start = 2024-04-27 00:00:00
+| end = 2024-06-10
+| impact = Unknown.
+}}
+
+
+<!-- Reminder: No private information on this page! -->Something happened between 2024-04-27 00:00 and 2024-04-27 00:08 UTC, and the rsync clients of most puppetmasters/puppetservers to sync data from puppetmaster1001 hung indefinitely.  On 2024-06-10, they were killed and restarted manually.
+
+This means that new data from puppet 'volatile' was only rarely/intermittently synced to much of the fleet during this window.
+
+The problem was particularly bad in codfw, where all 3 puppetservers had failed to rsync data for the entire duration.
+
+Getting a firm idea of the impact of this is difficult.  The new GeoLite2 files were unavailable, but also not in use in production yet(?).  The older 'enterprise' file was still being used for many uses, however, and would have grown stale.  Analytics (a heavy user of GeoIP data) was probably not very affected because it is eqiad-only.  Any CheckUser calls would have likely been affected by stale data.  
+
+On the other hand, aside from the one service wishing to use newly-added files ... no one noticed?  So this puts a sort of upper bound on the potential impact, however unsatisfying.  
+
+{{TOC|align=right}}
+
+==Timeline==
+<mark>Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.</mark>
+
+<mark>Consider including a graphs of the error rate or other surrogate.</mark>
+
+<mark>Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ ([https://sal.toolforge.org/production?q=synchronized&d=2012-01-01 example])</mark>
+
+''All times in UTC.''
+
+*00:00 (TODO) '''OUTAGE BEGINS'''
+*00:04 (Something something)
+*00:06 (Voila) '''OUTAGE ENDS'''
+*00:15 (post-outage cleanup finished)
+
+<!-- Reminder: No private information on this page! -->
+<mark>TODO: Clearly indicate when the user-visible outage began and ended.</mark>
+
+==Detection==
+Manual. 
+
+Kosta Harlan asked on #wikimedia-sre-foundations IRC to confirm that the new GeoLite2 files were available, as part of work on https://phabricator.wikimedia.org/T366272.  cdanis began investigating and discovered that the files were missing on most hosts in codfw where they were expected to exist: https://phabricator.wikimedia.org/P64540 
+
+==Conclusions ==
+
+===What went well?===
+
+*
+
+===What went poorly?===
+
+* Zero monitoring
+** No end-to-end alerting on data freshness (probably unnecessary, given below, but it would have been sufficient)
+** Monitoring and logging were explicitly disabled on the <code>sync-puppet-volatile</code> systemd::timer::job used to invoke the rsync clients.  This removes the possibility of alerting/notification on any hypothetical sync failures (if we had set timeouts)
+* Infinite timeouts were allowed, allowing the rsync clients to get stuck forever
+** No TimeoutStartSec on systemd::timer::job or on puppetmaster::rsync's invocations thereof
+** No use of --timeout or --contimeout in the invocation of rsync
+** This (somehow!) allowed multiple rsync clients to get stuck in an "impossible" situation
+*** An strace of one client inspected while the situation persisted showed it was blocked waiting on a <code>select()</code> call for its socket with the server to become readable
+*** However, the logs on the server side do not show any of the stuck clients connecting except for the previous runs ~15 minutes before the run that got perma-wedged.  The only cause that seems possible is rsyncd processes somehow getting deadlocked.
+
+===Where did we get lucky?===
+
+* Nothing obviously broke?
+
+==Links to relevant documentation==
+
+* [[Puppet#Volatile mount]]
+
+==Actionables==
+
+* Add a generous default TimeoutStartSec in systemd::timer::job.  It cannot be infinite.
+* Enable monitoring and logging for the systemd::timer::jobs defined in [[git:operations/puppet/+/production/modules/puppetmaster/manifests/rsync.pp|modules/puppetmaster/manifests/rsync.pp]]
+* Ensure that timer failures for sync-puppet-volatile get reported somewhere (#-sre-foundations IRC?)
+*
+
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFire]] Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

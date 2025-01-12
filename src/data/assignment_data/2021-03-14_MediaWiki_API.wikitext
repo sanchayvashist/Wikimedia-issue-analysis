@@ -1,0 +1,14 @@
+{{irdoc|status=final}}
+==Summary==
+On March 14 2021 the MediaWiki API were overloaded and ran out of php-fpm processes. This caused an API outage on all API servers from 17:00 to 17:26 UTC. The root cause of the outage were queries against commons that caused database s4 on server db1144 to be overloaded. Db1144 also serves queries to contributions, recentchanges, watchlist and other MediaWiki features. Task: [[phab:T277417|T277417]]
+
+[[File:Php response time.png]][[File:Db processlist on db1144.png|alt=Processlist on db1144]]
+
+https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?viewPanel=46&orgId=1&from=1615734448378&to=1615746774986&var-datasource=eqiad%20prometheus%2Fops&var-cluster=api_appserver&var-method=GET&var-code=200
+
+https://grafana.wikimedia.org/d/000000273/mysql?viewPanel=37&orgId=1&var-server=db1144&var-port=13314&from=1615738747603&to=1615745074190
+
+The queries against commons were analyzed for inefficiencies but seem to be well written and optimized SQL. See task: [[phab:T277416|T277416]]
+
+==Actionables==
+*Improve traceability of commons queries: [[phab:T193050|T193050]] (filed in 2018)

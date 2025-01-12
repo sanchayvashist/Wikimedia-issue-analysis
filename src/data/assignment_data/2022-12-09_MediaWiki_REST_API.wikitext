@@ -1,0 +1,173 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T324801
+| paged-num = 14
+| responders-num = 5
+| coordinators = [[User:Legoktm|Legoktm]]
+| start = 2022-12-06 12:27:18
+| end = 2022-12-09 02:39:00
+| impact = Visual diffs would have shown no changes (common feature, ~100,000 users of the beta feature on enwiki), and editing old revisions using the VisualEditor would not have worked (rare)
+}}A change in the MediaWiki REST API caused requests for old revisions to serve the current revision. It was noticed because visual diffs were all indicating no changes happened.{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+2022-12-06
+
+* 12:27 MediaWiki 1.40.0-wmf.13 deployment starts to group0 '''(problems begin)'''
+
+2022-12-08
+
+* 23:30 MatmaRex files [[phab:T324801|T324801: REST API serving content of current revision for old revisions]] and marks it as unbreak now!
+
+2022-12-09
+
+* 01:55 Arlolra alerts Transformers group chat that there's an active UBN
+* 02:04 Legoktm #pages _security channel and then uses Klaxon
+* 02:08 cwhite, legoktm, TheresNoTime start discussing in #wikimedia-operations
+* 02:08 cscott recommends a train rollback on [[phab:T324801#8455865|Phabricator]]
+* 02:17 cwhite begins train rollback from group2 to group1
+* 02:39 train rollback complete '''(problems resolved on group2 wikis, but continue on group0 and group1 wikis)'''
+* 04:15 ssastry identifies the culprit via git bisect on [[phab:T324801#8455911|Phabricator]]
+* 04:52 ssastry uploads initial patch https://gerrit.wikimedia.org/r/866527 (PS2 uploaded at 05:15, 7 minutes after CI fails)
+* 08:14 dkinzler C+2s
+* 08:37 merged to master
+* 10:41 ladsgroup cherry-picks to 1.40.0-wmf.13
+* 10:51 ladsgroup: backport deployed to testservers ([https://sal.toolforge.org/log/OYCC9oQB6FQ6iqKiyHxX SAL])
+* 11:00 initial testing by ladsgroup on group1 itwiki (still running wmf.13) is inconclusive due to caching 
+* 11:02 ladgroup completes deploy after resolving test issue '''(fix is now live on group0 and group1)''' ([https://sal.toolforge.org/log/9FCM9oQB8Fs0LHO579Xd SAL])
+* 13:13 hashar [https://sal.toolforge.org/log/CoAE94QB6FQ6iqKiyeoN rolls group2 forward to wmf.13]
+
+==Detection==
+The issue was manually detected by a human.
+
+==Conclusions ==
+===What went well?===
+
+* Train rollback resolved the issue on group2 wikis, no immediate issues or regressions caused by the rollback itself
+
+===What went poorly?===
+
+* The bug made it all the way to group2 before being noticed by a human
+** Phpunit tests for the <code>ParsoidHandler::wt2html()</code> method in MW core existed but were using the current revision ID.
+** Mocha tests for the <code>page/html/{title}/{revid}</code> endpoint in the Parsoid extension existed but were using the current revision ID.
+** No tests exist for the visual diff feature in VisualEditor.
+** The visual diff feature in VisualEditor isn't accessed frequently enough in group0/group1 to facilitate earlier detection.
+* The train rollback took 22 minutes, updating wikiversions in case of rollback should be near immediate
+* The bug was detected fairly late in the evening US time. The author of the root cause patch was offline (european time) and the Content-Transform-Team members had to scramble and cancel/rearrange dinner and evening plans.
+
+===Where did we get lucky?===
+
+* The train rollback was safe. Had there been a risky (non-revertible) change, it would have needed more time to identify the problematic commit and selectively revert.
+* No regressions from the Parsoid version downgrade, which was an untested scenario. After the rollback, RESTBase will continue to serve 2.7.0 version content (for titles where that version had been stored) whereas Parsoid (after rollback) doesn't know about version 2.7.0. There was a concern the REST API would reject Parsoid HTML v2.7.0 when submitted for saves. But, that didn't manifest. It would be useful to document and test this rollback behavior more thoroughly.
+* There's a similar possible rollback issue with ParserCache changes, and Subbu has been working on changes to the representation of Table of Contents information in the ParserCache.  These rollback paths have more CI support for ensuring backward compatibility, but /forward/ compatibility of parser cache contents is only enforced by using a disciplined patch sequence which is (AFAIK) undocumented.  In the worse-case scenario, we would have discovered that an unrelated parsercache migration also prevented a clean rollback.
+* The content transform team has a out-of-band signal chat for emergencies but which is probably not useful to wake up members in the night. The incident coordinator, legoktm, was on that channel having participated in a previous year's offsite, and so was able to use it to quickly contact the content transform team and coordinate a response. If the incident had occurred a few hours later, both the north american and european responders might have been asleep.
+* Subbu was able to work late into his evening and prepare an initial fix, which was then reviewed and deployed early in the morning europe time.
+
+==Links to relevant documentation==
+
+* It seems like there should be a guide that says (eg) "the visual diff component is powered by RESTBase" -> "RESTBase uses the Parsoid core API; problem with RESTBase are likely caused by either RESTBase (deploy log here) or the Parsoid core API" -> "problems with the Parsoid core API are likely caused by either the API code (mediawiki-core:includes/Rest) or the Parsoid library (deploy log here); in either case rollback will fix the problem".  That would allow an SRE to determine (a) there hadn't been a recent RESTBase deploy, so that was unlikely, so (b) rollback is the best option.
+** RESTBase deploys are listed in SAL, eg https://sal.toolforge.org/log/D_drD4QBa_6PSCT9SW-U
+** Parsoid deployments are logged at [[mw:Parsoid/Deployments|Parsoid/Deployments]]
+** What's missing is "the visual diff component is powered by RESTBase"; I don't think we maintain a complete list of all the downstream clients of RESTBase output
+* Note that the incident was caused by a refactoring that is aiming to cut RESTbase out of the flow described above. In the future, visual diff should use the <code>v1/revision/{id}/html</code> endpoint in core. It could probably even start doing this right now.
+* …
+
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+==Actionables==
+
+* Automated testing to verify behavior of requesting HTML of old revisions from the REST API (https://gerrit.wikimedia.org/r/866621, https://gerrit.wikimedia.org/r/866622)
+** Should examine why/how Parsoid's "old" api-testing pathways regressed, which would/should have covered this code.  Are there other tests from the old api-testing suite which have similarly vanished?
+*** The tests for retrieving revision HTML by revision ID existed and was covering this path - but the revision ID it was using for the test was the current revision. We never had a test specifically for an old revision. This has now been added. [[User:Daniel Kinzler|daniel]] ([[User talk:Daniel Kinzler|talk]]) 16:54, 15 December 2022 (UTC)
+* There are alternate 'easier' ways to do rollbacks now.  Update documentation.
+* Is the 22-minute long sync-wikiversions expected? No.
+** The kubernetes multi-version image build took 10 minutes.  The reason is a bad behavior in the incremental image build process when wikiversions rolls back.  https://phabricator.wikimedia.org/T325576
+* Documentation to make it clearer that rollback was the correct solution to this problem.
+* Something around testing forward- and backward-compatibility of Parsoid/RESTBase version downgrades
+* Something around testing forward-compatibility of ParserCache changes
+** The documentation doesn't just need to exist, it needs to be discoverable in the the right spot. Probably in a place that developers would touch when trying to implement backwards compatibility.
+* Is there some way to enhance the visibility of breakages in the "visual diff" feature, to make it more likely regressions in the feature will be caught during group0 or group1 rollout?
+** It would be nice to have Selenium tests for this feature. Selenium tests are slow, brittle, and tricky to set up locally. It would help if we could streamline this.
+* Reduce the gap between the UBN being filed and the relevant team springing into action
+** Platform Engineering currently doesn't have a notification mechanism for UBNs. A bot posting to Slack would be helpful.
+
+==Scorecard==
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|batphone because after business hours
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|all SRE were paged, Content Transform Team was not paged
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|This wiki page was created before the incident was resolved, but Kunal the IC didn't have access needed to create a incident status google doc.
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|[[phab:T324801|T324801]]
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|no
+|See above regarding usage of Signal and #page in #mediawiki_security
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|Issue was manually detected by a human
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|phabricator, klaxon, scap sync-wikiversions worked
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|[[Heterogeneous_deployment/Train_deploys#Rollback]]
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

@@ -1,0 +1,39 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+Shortly after the June 2021 switch over, the backend appservers were unable to serve requests to <code>tr.wikivoyage.org</code> for about 8 minutes from 14:22 UTC to 14:30 UTC. No other wikis were affected.
+
+'''Impact''': For 8 minutes, registered users on the Turkish Wikivoyage were consistently unable to load any pages or perform any actions. The general public may have noticed it to a lesser extent due to caching at our CDN layer, although any pages absent from the CDN cache would have also been been temporarily unavailable.
+
+=== Details ===
+The [https://tr.wikivoyage.org/ Turkish Wikivoyage] project was created a few months ago on 19 January 2021 ([[phab:T271260|T271260]]). The site configuration for it includes an assignment from the wiki to one of our primary databases ([[gerrit:c/657072|config patch]]), specifically on the s5 cluster. These assignments are done separately for each of our core datacenters: Eqiad, and Codfw, despite being identical.
+
+The assignment for Codfw, our then-inactive datacenter, contained a typo, so MediaWiki would look for the trwikivoyage database in the s3 cluster instead of s5. This was not spotted in code review, and that particular configuration key was not subject to data validation, and after deployment the unavailability of this wiki within the inactive Codfw cluster was not covered by local monitoring.
+
+Today at 14:21 UTC, we switched traffic from Eqiad to Codfw, and thus the typo became apparent through PHP Fatal Errors for backend requests to <code>tr.wikivoyage.org</code>. This was found through Logstash, and also detectable with alerts from the Prometheus metrics for error logs.
+ [{reqId}] {exception_url} Wikimedia\Rdbms\DBQueryError: Error 1049: Unknown database 'trwikivoyage'
+ Function: Wikimedia\Rdbms\DatabaseMysqlBase::doSelectDomain
+ Query: USE `trwikivoyage` 
+
+<pre>
+[14:26:11] <marostegui> I am checking an error related to: Unknown database 'trwikivoyage'
+[14:27:09] <legoktm> indeed, https://tr.wikivoyage.org/ is down
+[14:27:38] <marostegui> urbanecm: looks like it is being searched for in s3
+[14:27:41] <marostegui> but it is on s5
+</pre>
+At 14:28, @Urbanecm uploaded [[gerrit:c/operations/mediawiki-config/+/702136/|a patch]] to correct the configuration.<blockquote>14:30     <legoktm@deploy1002>     Synchronized wmf-config/db-codfw.php: fix trwikivoyage (duration: 01m 01s)</blockquote>At 14:30, @Legoktm finished the deployment of that patch.
+
+'''Relevant documentation''':
+* [https://sal.toolforge.org/production?p=1&q=&d=2021-06-29 Server admin log: 2021-06-29]
+* [[Switch Datacenter|Switch overs]]
+* [[Data centers]]
+* [[Application servers|Appservers]]
+
+==Actionables==
+
+* {{done}} [[phab:T260297|T260297: db-eqiad and db-codfw sectionsByLoad can get out of sync]]

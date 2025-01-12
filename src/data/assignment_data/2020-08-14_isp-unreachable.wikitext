@@ -1,0 +1,11 @@
+{{irdoc|status=final}}
+== Summary ==
+Users of Jio ISP (India, AS 55836) unable to reach Wikimedia sites.
+
+Caused by a misconfiguration in Jio's own RPKI records, which can only be fixed on their end.  Their network engineers are aware and working on the issue.
+
+As temporary workaround, Wikimedia changed its network advertisements to accept invalid RPKI to let Jio costumers reach our sites again.
+
+== Actionables ==
+* https://phabricator.wikimedia.org/T260449
+* https://phabricator.wikimedia.org/T260452

@@ -1,0 +1,160 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = T309178
+| paged-num = 26
+| responders-num = 8
+| coordinators = Jbond
+| start = 20:08
+| end = 20:14
+| impact = For 6 minutes, a portion of logged-in users and non-cached pages experienced a slower response or an error. This was due to increased load on one of the databases.
+}}
+
+An increase in POST requests to de.wikipedia.org caused an increase in load on one of the DB servers resulting in an increase in 503 responses and increased response time
+
+{{TOC|align=right}}
+
+==Timeline==
+
+'''All times in UTC.'''
+
+*20:04 '''OUTAGE BEGINS'''
+*20:04 Received page "Service text-https:443 has failed probes"
+*20:08 '''rzl starts investigation'''
+*20:08 Received page "(FrontendUnavailable) firing: HAProxy (cache_text) has reduced HTTP availability"
+*20:08 rzl asked cjming to halt deploying
+*20:09 Recived page "(FrontendUnavailable) firing: varnish-text has reduced HTTP availability"
+*20:09 '''jbond takes IC''' 
+*20:10 < rzl> looks like a spike of DB queries to s5 that saturated php-fpm workers, seems like it's already cleared
+*20:11 Received recovery "RECOVERY - High average GET latency for mw requests on appserver"
+*20:11 < cwhite> Lots of POST to https://de.wikipedia.org
+*20:12 < rzl> [https://grafana.wikimedia.org/d/000000278/mysql-aggregated?orgId=1&var-site=eqiad&var-group=core&var-shard=s5&var-role=All&from=1653416788376&to=1653427535487 s5 did see a traffic spike but recovered], still digging
+*20:13 Received recovery "resolved: (8) Service text-https:443 has failed probes"
+*20:13 Received recovery "resolved: HAProxy (cache_text) has reduced HTTP availability"
+*20:14 Received recovery "resolved: varnish-text has reduced HTTP availability"
+*20:14 '''OUTAGE ENDS'''
+*20:14 < cwhite> [https://logstash.wikimedia.org/goto/f23d960df9200156ea11b85fc727d58c 2217 unique ips (according to logstash)]
+*20:18 < bblack> identified traffic as "a bunch of dewiki root URLs"
+*20:22 < _joe_> php slowlogs mostly showed query() or curl_exec()
+*20:30 < _joe_> someone was calling radompage repeatedly?
+*20:31 <rzl> [https://grafana-rw.wikimedia.org/explore?left=%5B%221653422697708%22,%221653423304355%22,%22eqiad%20prometheus%2Fops%22,%7B%22expr%22:%22sum%20by%20(instance)%20(irate(apache_accesses_total%7Bcluster%3D%5C%22appserver%5C%22,%20job%3D%5C%22apache%5C%22,%20instance%3D~%5C%22mw1.*%5C%22%7D%5B2m%5D))%22,%22format%22:%22time_series%22,%22intervalFactor%22:2,%22refId%22:%22A%22,%22target%22:%22%22,%22datasource%22:%7B%22type%22:%22prometheus%22,%22uid%22:%22000000006%22%7D,%22interval%22:%22%22,%22exemplar%22:false%7D,%7B%22expr%22:%22%22,%22format%22:%22time_series%22,%22intervalFactor%22:2,%22refId%22:%22B%22,%22datasource%22:%7B%22type%22:%22prometheus%22,%22uid%22:%22000000006%22%7D,%22interval%22:%22%22,%22instant%22:true,%22range%22:true,%22exemplar%22:false%7D%5D&orgId=1 looks like it was all appservers pretty equally]
+*20:40 Discuss remediation strategy
+*20:48 '''Incident officially closed'''
+*20:51 < rzl> gave cjming all clear to continue with deploy
+*21:29 '''requestctl rule put in place'''
+
+==Detection==
+Error was detected by alert manager monitoring
+
+<syntaxhighlight lang="irc">
+20:08 <+jinxer-wm> (ProbeDown) firing: (8) Service text-https:443 has failed probes (http_text-https_ip4) #page - https://wikitech.wikimedia.org/wiki/Network_monitoring#ProbeDown -
+https://grafana.wikimedia.org/d/O0nHhdhnz/network-probes-overview?var-job=probes/service&var-module=http - https://alerts.wikimedia.org/?q=alertname%3DProbeDown
+20:08 <+jinxer-wm> (FrontendUnavailable) firing: HAProxy (cache_text) has reduced HTTP availability #page - TODO - https://grafana.wikimedia.org/d/000000479/frontend-traffic?viewPanel=13 - https://alerts.wikimedia.org/?q=alertname%3DFrontendUnavailable
+20:09 <+jinxer-wm> (FrontendUnavailable) firing: varnish-text has reduced HTTP availability #page - https://wikitech.wikimedia.org/wiki/Varnish#Diagnosing_Varnish_alerts - https://grafana.wikimedia.org/d/000000479/frontend-traffic?viewPanel=3 - https://alerts.wikimedia.org/?q=alertname%3DFrontendUnavailable
+</syntaxhighlight>
+
+==Conclusions==
+Understanding of legitimate backed traffic would enable us to better sanitize bad traffic at the front end
+
+===What went well?===
+* automated monitoring detected the incident
+* Had a good amount of incident responders
+
+===What went poorly?===
+* Was difficult to get a signature of the post traffic
+
+===Where did we get lucky?===
+* Incident ended quickly on its own
+
+===How many people were involved in the remediation?===
+* SREs
+
+==Links to relevant documentation==
+
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1653422582753&to=1653423280761 Grafana: Appservers RED]
+
+==Actionables==
+*[https://phabricator.wikimedia.org/T309147 T309147]  any POST that doesn't go to /w/*.php  or /wiki/.* should become a 301 to the same url
+*[https://phabricator.wikimedia.org/T309186 T309186] Created sampled log of post data
+*[https://phabricator.wikimedia.org/T310009 T310009] Make it easier to create a new requestctl object
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|(created retrospectively)
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|(similar to "2022-05-20 Database slow / appserver")
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were all engineering tools required available and in service?
+|yes
+|
+|-
+|Was there a runbook for all known issues present?
+|no
+|Setting to no as we need to update the DDoS playbook. We have also updated the question from now on to reflect that.
+|-
+! colspan="2" align="right" |Total score (c'''ount of all “yes” answers above)'''
+|7
+|
+|}

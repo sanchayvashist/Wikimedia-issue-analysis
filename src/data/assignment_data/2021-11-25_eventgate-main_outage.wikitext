@@ -1,0 +1,134 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+==Summary and Metadata==
+{| class="wikitable"
+|'''Incident ID'''
+|2021-11-25 eventgate-main outage
+|'''UTC Start Timestamp:'''
+|2021-11-25 07:32
+|-
+|'''Incident Task''' 
+|https://phabricator.wikimedia.org/T299970
+|'''UTC End Timestamp'''
+|2021-11-25 07:35
+|-
+| '''People Paged'''
+|0
+|'''Responder Count'''
+|1
+|-
+|'''Coordinator(s)'''
+|No Coordinator needed
+|'''Relevant Metrics / SLO(s) affected'''
+|
+* 25k MediaWiki backend errors
+
+* 1k web & API requests resulted in a 500
+
+* Event intake dropped to 0 (from 3k) for the duration
+
+No SLO defined, no error budget consumed
+|-
+|'''Summary:'''
+| colspan="3" |For about 3 minutes (from 7:32 to 7:35 UTC), eventgate-main was unavailable. This resulted in 25,000 unrecoverable MediaWiki backend errors due to inability to queue new jobs. About 1,000 user-facing web requests and API requests failed with an HTTP 500 error. Event intake processing rate measured by eventgate briefly dropped from ~3000/second to 0/second during the outage.
+|}During the [[Helm|helm3]] migration of eqiad Kubernetes cluster the service eventgate-main experience an outage. The service was not available between 7:32 and 7:35 UTC. 
+
+For the helm3 migration the service had to be removed and re-deployed to the cluster. Most Kubernetes services were explicitly pooled in codfw-only during the re-deployments. eventgate-main was also falsely assumed to be served by [[Codfw cluster|Codfw]] but was still pooled in [[Eqiad cluster|Eqiad]]. So during the time of removing and re-creating the pods, no traffic could be served for this service.
+
+The commands used to migrate and re-deploy codfw (see [[phab:T251305#7492328|T251305#7492328]]) were adapted and re-used for eqiad (see [[phab:T251305#7526591|T251305#7526591]]). Due to a small difference in what Kubernetes services are pooled as active-active and what are active-passive, eventgate-main was missing in the depooling command (as is it not pooled in codfw currently).
+
+'''Impact''': For about 3 minutes (from 7:32 to 7:35 UTC), eventgate-main was unavailable. This resulted in 25,000 unrecoverable MediaWiki backend errors due to inability to queue new jobs. About 1,000 user-facing web requests and API requests failed with an HTTP 500 error. Event intake processing rate measured by eventgate briefly dropped from ~3000/second to 0/second during the outage.
+
+'''Documentation''':
+*[https://grafana.wikimedia.org/d/000000438/mediawiki-exceptions-alerts?orgId=1&var-datasource=eqiad%20prometheus%2Fops&viewPanel=18&from=1637825199597&to=1637826150301 Grafana Dashboard MediaWiki Exceptions]
+*[https://grafana.wikimedia.org/d/ZB39Izmnz/eventgate?orgId=1&from=1637824200000&to=1637827200000 Grafana eventgate statistics]
+*[https://grafana.wikimedia.org/d/000000503/varnish-http-errors?viewPanel=7&orgId=1&from=1637825257550&to=1637826384984 Grafana Varnish http errors]
+<gallery mode="packed">
+File:2021-11-25-mediawiki-exceptions.png
+File:2021-11-25-eventgate-statistics.png
+File:2021-11-25-varnish-http500.png
+</gallery>
+=Scorecard=
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no) 
+|N/A
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|N/A
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+| Are the documented action items assigned?  (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no) 
+|N/A
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|5
+|
+|}
+==Actionables==
+
+*automate maintenance and proper de-depooling of Kubernetes services using a cookbook [[phab:T277677|T277677]] and [[phab:T260663|T260663]]
+*reduce snowflake services which need special treatment and make most/all of them active-active (for example [[phab:T288685|T288685]])
+*optional: create a lvs/pybal/k8s service dashboard to see which service is pooled in which DC (will create a task)
+*[[phab:T296699|T296699: Pool eventgate-main in both datacenters (active/active)]]

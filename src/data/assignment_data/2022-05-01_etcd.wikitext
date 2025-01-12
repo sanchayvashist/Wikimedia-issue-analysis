@@ -1,0 +1,108 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T307382
+| paged-num = 15
+| responders-num = 2
+| coordinators = dzahn, cwhite
+| start = 04:48
+| end = 06:38
+| metrics = [[SLO/etcd main cluster|etcd main cluster]]
+| impact = For 2 hours, Conftool could not sync Etcd configuration data between our core data centers. This means the DCs started getting out of sync, puppet-merge was inoperational, and wikitech/labweb hosts expeerienced failed systemd timers. No noticable impact on public services.
+}}
+<!-- Reminder: No private information on this page! -->
+
+The TLS certificate for etcd.eqiad.wmnet expired. Nginx servers on conf* hosts use this certificate, and thus [[conftool]]-data could not sync between conf hosts anymore. During this time, <code>puppet-merge</code> returned sync errors. [[Labweb1001|labweb]] (wikitech) hosts alerted because of failed timers/jobs.
+
+We got paged by monitoring of "Etcd replication lag". We had to renew the certificate but it wasn't a simple renew, because additionally some certificates had already converted to a new way or creating and managing them while others had not. Our two core [[data centers]] were in different states. Only Eqiad was affected by lag and sync errors. After figuring this out, we eventually created a new certificate for etcd.eqiad using <code>cergen</code>, copied the private key and certs in place and reconfigured servers in Eqiad to use it. After this, all alerts recovered.
+
+'''Documentation''':
+*https://grafana.wikimedia.org/d/Ku6V7QYGz/etcd3?orgId=1&from=1651361014023&to=1651428319517
+*https://logstash.wikimedia.org/goto/1e1994e64e8c23ef570fb19f562bf08b
+
+==Actionables==
+<mark>Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.</mark>
+
+*[[phab:T307382|T307382]] (Modernize etcd tlsproxy certificate management)
+*[[phab:T307383|T307383]] <mark>(Certificate expiration monitoring)</mark>
+* https://gerrit.wikimedia.org/r/q/topic:etcd-certs (5 Gerrit changes)
+
+<mark>TODO: Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]] Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+| 1
+| probably? do we actually go through the last 5 incidents? Which list to use?
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+| 1
+| combined knowledge of both responders did it
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+| 1
+| 15 paged, 2 responded
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+| 0
+| Are any pages routed to subteams yet?
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+| 0
+| weekend and late 
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+| 0
+| no public impact that would have made it useful
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+| 0
+| no public impact that would have made it useful
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+| 1
+| https://phabricator.wikimedia.org/T302153 was reused, as well as follow-up task https://phabricator.wikimedia.org/T307382
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+| 1
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+| 0
+| unsure though, maybe but before we made reports for them
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+| 0
+| could have had one to migrate eqiad certs to cergen
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+| 1
+| IRC
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+| 1
+| Yes, but only when cert was already expired. Should have had alerting before that.
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+| 1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+| 0
+|
+|-
+! colspan="2" align="right" |Total score
+| 8
+|
+|}

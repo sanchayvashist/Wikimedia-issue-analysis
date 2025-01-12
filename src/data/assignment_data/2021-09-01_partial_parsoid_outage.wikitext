@@ -1,0 +1,65 @@
+{{irdoc|status=review}}
+==Summary==
+At 02:05 UTC, the parse2007 server in Codfw started to spontaneously respond with fatal error, possibly due to a php-opcache corruption. At 11:20 UTC, the server was restarted per the (now common) procedure in response to such corruptions after which the errors immediately stopped. Other parse servers and MW servers were not affected.  
+
+'''Impact''': For 9 hours, 10% of submissions to Parsoid to parse or save wiki pages were failing on all wikis.
+
+{{TOC|align=right}}
+
+==Timeline==
+[[File:2021-09-01 Parsoid fatals.png|thumb|Fatal errors in Logstash.]]
+[[File:2021-09-01 Parsoid POST 5xx.png|thumb|Failing POST requests in Grafana.]]
+
+'''All times in UTC.'''
+
+*02:05: '''Outage starts''' (Retroactively) Logs indicate that <code>parse2007: Cannot declare class XWikimediaDebug in XWikimediaDebug.php</code> started at this time. This is affecting about 10% of POST requests
+*03:54: mmodell, as [[Deployments/Train|train conductor]] this week, notices the spike and creates [[phab:T290120|T290120]]. 
+*12:00 Krinkle finds the report during routine triage, notices that it is still on-going at high frequency, still unattended, and investigates.
+*12:10: The issue is investigated and understood to be a likely opcache corruption, given that the source code in question has not changed recently and is not known to be defined or referenced in an unusual manner. The usual procedure for opcache corruptions is to restart php-fpm.
+*12:19: Effie restarts php-fpm on parse2007
+*12:20: '''Outage ends'''
+
+==Detection==
+Human reporting an error.
+
+==Conclusions==
+===What went well?===
+
+* A simliar issue was found a year earlier at [[phab:T245183#6212267|T245183#6212267]] (and remembered today), which let us jump to the opcache suspicion and thus restart the php-fpm service as mitigation.
+* Logstash dashboards.
+* Grafana dashboards.
+
+===What went poorly?===
+
+* For 9 hours, no-one triaged the task, or independently noticed the error spike, or otherwise investigated it.
+* No alerts fired.
+**There is an alert query for appserver fatals, but it did not fire because for two reasons. 1) The alert only measures overall HTTP traffic, with the majority of requests being GET rather than POST. 2) For the parsoid cluster there is a high level of timeouts and OOMs that regularly produce fatals. Thus when new deterministic fatal errors are introduced that affect user submissions, due to bad code or an unhealthy server, this alert can't fire unless it rises significantly above the combined rate of timeouts, OOMs, and other GET failures.
+**We also measure "mediawiki-new-errors" in Logstash, where this error stood out by more than 100X. However, we don't have an alert on that.
+**We also measure "appserver HTTP 5xx for POST" in Prometheus/Grafana, where this stood as a 20X increase from <0.1% to >10%. However, we don't alert on that. 
+* Krinkle unable to ssh to parse2007.
+
+===Where did we get lucky?===
+
+* Urbanecm was around to offer a workaround for the ssh issue using [[Keyholder]].
+* Effie was around as well, who did the actual restart.
+* <mark>(To be confirmed) Are there retries at some level?</mark> I suspect not given POST retries are usualy unsafe, but there is also an apparent lack of observed impact on edit count, Restbase reqs, and VisualEditor saves.
+**If the issue would have caused the network connection to close before the HTTP 500 response was sent, then browsers would retry (per [[RFC:2616]], which applies to POST as well).
+**RESTBase does retries for sure, which is likely why end-users only noticed a delay and not (significant) loss of edits, apart from e.g. more edit conflicts.
+
+===How many people were involved in the remediation?===
+
+* 1 engineer.
+* 1 SRE.
+
+==Links to relevant documentation==
+
+* [[Application servers/Runbook]]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?viewPanel=20&orgId=1&var-datasource=codfw%20prometheus%2Fops&var-cluster=parsoid&var-method=POST&var-code=200&from=1630443600000&to=1630499400000 Grafana: App server RED / parsoid / POST]
+
+==Actionables==
+
+* <s>Let deployers ssh to parse hosts. [[phab:T290144|T290144]]</s>
+* TODO: Re-evaluate alerting strategy around "mediawiki-exceptions". We have a breakdown by cluster (web,api,job,parsoid). Do we need a breakdown by HTTP verb? (E.g.  "read" GET/HEAD/OPTIONS vs write "POST/DELETE" or some such).
+* TODO: I was unable to find stats on error rates of api.php requests in Grafana. HTTP-level app server stats are insufficient since api errors are HTTP 200. The Graphite metrics for [https://grafana-rw.wikimedia.org/d/000000559/api-requests-breakdown API req breakdown] don't measure errors currently. The Logstash data for api-appservers errors is also insufficient since properly handled errors wouldn't be exceptions and wouldn't be logged there as such (e.g. when action=visualeditoredit finds Restbase/Parsoid respond with http 500, it responds to the client with an error. Where do we measure this?)
+
+<mark>TODO: Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] Phabricator tag to these tasks.</mark>

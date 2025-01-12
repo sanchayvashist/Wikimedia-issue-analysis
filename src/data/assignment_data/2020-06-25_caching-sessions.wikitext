@@ -1,0 +1,16 @@
+{{irdoc|status=final}}
+== Summary ==
+See also <https://lists.wikimedia.org/pipermail/wikitech-ambassadors/2020-June/002316.html>
+
+Documentation:
+
+* User reports: [[phab:T257522|T257522]], [[phab:T256395|T256395]], [[phab:T255156|T255156]]
+
+* [[gerrit:plugins/gitiles/operations/puppet/+/d9e65609939dac79cb6ae411c4e8084b7f61a0ac/modules/varnish/templates/text-backend.inc.vcl.erb#72|text-backend.inc.vcl.erb#72]]
+
+== Timeline ==
+[https://docs.google.com/document/d/1VOV_jMvJd8sRHYLJ3l-OYa5PERT4RVWDFbWqNRWK71A/edit?usp=drive_web&ouid=111695442409187585233 Restricted document]. 
+
+== Actionables ==
+
+* https://phabricator.wikimedia.org/T260098 Understand beresp.ttl=0 issues in Varnish

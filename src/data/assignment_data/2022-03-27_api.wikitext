@@ -1,0 +1,175 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = 
+| paged-num = N/A
+| responders-num = 8
+| coordinators = Alexandros
+| start = 2022-03-27 14:36
+| end = 2022-03-28 12:39
+| impact = For about 4 hours, in three segments of 1-2 hours each over two days, there were higher levels of failed or slow MediaWiki API requests.
+}}
+
+A template changes in itwiki triggered translusion updates to many pages. Changeprop (with retries) issued thousands of requests to the API cluster to reparse the transcluding pages, including page summaries, which are done by Mobileapps.{{TOC|align=right}}
+
+==Timeline==
+'''All times in UTC.'''
+
+=== 2022-03-27 ===
+14:36: PROBLEM - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page - '''OUTAGE BEGINS'''
+
+14:47: elukey checks access logs on mw1312 - user agent Mobileapps/WMF predominant (67325)
+
+14:55: RECOVERY - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page
+
+15:00: elukey checks access logs on mw1314 - user agent Mobileapps/WMF predominant (57540)
+
+15:03: (potentially unrelated) <akosiaris>sigh, looking at logstash and seeing that mobileapps in codfw is so heavily throttled by kubernetes
+
+15:15: RECOVERY - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page
+
+15:33: PROBLEM - Some MediaWiki servers are running out of idle PHP-FPM workers in api_appserver at eqiad
+
+15:39: RECOVERY - Some MediaWiki servers are running out of idle PHP-FPM workers in api_appserver at eqiad
+
+15:39  Incident opened. Alexandros Kosiaris becomes IC.
+
+15:45 Suspicions raised regarding the Mobileapps user-agent that was doing the majority of requests to the API cluster. That's an internal service.
+
+15:49 Realization that Mobileapps in codfw is routinely throttled, leading to increased errors and latencies.
+
+16:09 Realization that an update of <nowiki>https://it.wikipedia.org/w/index.php?title=Template:Avviso_utente</nowiki> , a template in itwiki lead to this via changeprop, RESTBase, mobileapps - '''OUTAGE ENDS'''
+
+19:09 Pages again: PROBLEM - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page on alert1001 is CRITICAL: 0.2933 lt 0.3 <nowiki>https://bit.ly/wmf-fpmsat</nowiki> <nowiki>https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=54&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad+prometheus/ops&var-cluster=api_appserver</nowiki> - '''OUTAGE BEGINS AGAIN'''
+
+19:25 _joe_: restarting php on mw1380
+
+19:35 _joe_: $ sudo cumin -b1 -s20 'A:mw-api and P{mw13[56-82].eqiad.wmnet}' 'restart-php7.2-fpm'
+
+19:56 <_joe_> I restarted a few envoys of the servers that had more connections active in lvs, and now things look more balanced - '''OUTAGE ENDS AGAIN'''
+
+[ This was because Envoy’s long-lived upstream connections prevented the saturation imbalance from self-correcting.]
+
+=== 2022-03-28 ===
+12:08: Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad - '''OUTAGE BEGINS AGAIN'''
+
+12:13: Emperor,_joe_,jayme confirmed same problem as yesterday
+
+12:39: jayme deployed a changeprop change lowering the concurrency for transclusion updates (from 200 to 100): https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/774462 - '''OUTAGE ENDS AGAIN'''
+
+==Detection==
+The consequences of the issues, that is not having enough PHP-FPM workers available was detected in a timely manner from icinga multiple times
+
+* 14:36: PROBLEM - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page
+* 15:33: PROBLEM - Some MediaWiki servers are running out of idle PHP-FPM workers in api_appserver at eqiad
+* 19:09 Pages again: PROBLEM - Not enough idle PHP-FPM workers for Mediawiki api_appserver at eqiad #page on alert1001 is CRITICAL: 0.2933 lt 0.3 
+
+Unfortunately it took a considerable amount of time to pin down the root cause.
+
+==Conclusions==
+===What went well?===
+
+* Multiple people responded
+* Automated monitoring detected the incident
+* Graphs and dashboard showcased the issue quickly
+
+===What went poorly?===
+
+* The link between changeprop, mobileapps, restbase and API wasn't quickly drawn causing a prolonged and flapping outage
+* No changeprop experienced people were around.
+
+===Where did we get lucky?===
+*1 of the responders linked the https://it.wikipedia.org/w/index.php?title=Template:Avviso_utente template change to the event.
+
+===How many people were involved in the remediation?===
+
+* 8. 7 SREs, 1 software engineer from Performance
+
+==Links to relevant documentation==
+
+* <nowiki>https://wikitech.wikimedia.org/wiki/</nowiki>[[Changeprop]]
+* [[Mobileapps (service)]]
+
+==Actionables==
+
+*<s>Mobileapps is often throttled in codfw [[phab:T305482|T305482]]</s>
+*<s>Limit changeprop transclusion concurrency. https://gerrit.wikimedia.org/r/c/operations/deployment-charts/+/774462</s>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+| 0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|0
+|
+|-
+! colspan="2" align="right" |Total score
+|5
+|
+|}

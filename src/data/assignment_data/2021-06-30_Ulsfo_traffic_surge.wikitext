@@ -1,0 +1,11 @@
+{{irdoc|status=final}} 
+==Summary==
+Sometime after 22:00 UTC, a traffic surge started to fill up the capacity of a network port in the [[Ulsfo cluster]]. By 23:00 UTC the issue was mitigated.
+
+'''Impact:''' For up to an hour, a portion of requests may have received a slower response from regions served by the San Francisco DC. This includes New Zealand, and parts of North America.
+
+'''Documentation:'''
+*[https://github.com/wikimedia/operations-dns/blob/e4841851bef97124a3fd5beb09ffcc61fa49f59f/geo-maps#L7-L63 Wikimedia DNS: DC geo map]
+
+==Actionables==
+None.

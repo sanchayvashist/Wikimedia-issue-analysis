@@ -1,0 +1,147 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T320990
+| paged-num = 17
+| responders-num = 3
+| coordinators = rzl
+| start = 2022-10-15 22:37
+| end = 2022-10-15 23:01
+| metrics = No relevant SLOs exist; frwiki, jawiki, ruwiki, and wikitech were read-only for 24 minutes
+| impact = frwiki, jawiki, ruwiki, and wikitech were read-only for 24 minutes (starting Sunday 12:37 AM in France, 7:37 AM in Japan, and very early- to mid-morning in Russia).
+}}The s6 master, db1131, went offline due to a bad DIMM. We rebooted it via ipmitool and restarted mariadb, then failed over to db1173 and depooled db1131.{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC, 2022-10-15.''
+
+*17:19 db1131 records a SEL entry: <code>Correctable memory error logging disabled for a memory device at location DIMM_A6.</code> At this point the DIMM has started to fail but the errors are still correctable.
+*22:37 Last pre-outage edits on [https://fr.wikipedia.org/w/index.php?title=Ivan_Goloubev-Monatkine&curid=15236581&diff=197826549&oldid=197826342 frwiki], [https://ja.wikipedia.org/w/index.php?title=%E6%B8%85%E5%8E%9F%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E3%82%A8%E3%83%AA%E3%82%A2&curid=978988&diff=91976699&oldid=89087606 jawiki], [https://ru.wikipedia.org/w/index.php?title=%D0%9A%D0%B0%D1%82%D0%B5%D0%B3%D0%BE%D1%80%D0%B8%D1%8F:%D0%94%D0%B5%D0%BF%D1%83%D1%82%D0%B0%D1%82%D1%8B_%D0%9B%D1%83%D0%B3%D0%B0%D0%BD%D1%81%D0%BA%D0%BE%D0%B3%D0%BE_%D0%B3%D0%BE%D1%80%D0%BE%D0%B4%D1%81%D0%BA%D0%BE%D0%B3%D0%BE_%D1%81%D0%BE%D0%B2%D0%B5%D1%82%D0%B0&curid=7215375&diff=126082951&oldid=89142386 ruwiki].
+*22:37 db1131, s6 master, experiences multi-bit memory errors in DIMM A6. The machine reboots and then locks up. '''[OUTAGE BEGINS]'''
+*22:40 First paging alert: <code><icinga-wm> PROBLEM - Host db1131 #page is DOWN: PING CRITICAL - Packet loss = 100%</code>
+*22:43 Amir1 begins working on an emergency switchover. ({{phab|T320879}})
+*22:43 Pages for “error connecting to master” from replicas db1173, db1098, db1113, db1168.
+*22:44 Amir1 downtimes A:db-section-s6 for the switchover, suppressing any further replica pages.
+*22:48 Incident opened; rzl becomes IC.
+*22:48 Amir1 asks for db1131 to be power-cycled (which is much faster than switching over with the master offline).
+*22:50 [https://wikimedia.statuspage.io/incidents/hnm5c223c26v rzl posts a new incident as “Investigating” to statuspage.]
+*22:54 Amir1 sets s6 to read-only
+*22:54 rzl powercycles db1131 via ipmitool
+*22:57 db1131 begins answering ping; Amir1 starts mariadb
+*22:59 <Amir1> it should be rw now
+*23:01 rzl notes no activity on frwiki's RecentChanges, tries a test edit, and gets "The primary database server is running in read-only mode." as MediaWiki is still set to read-only.
+*23:01 Amir1 turns off read-only mode. '''[OUTAGE ENDS]'''
+*23:01 First post-outage edits on affected wikis.
+*23:02 Amir1 resumes the originally-planned master switchover from db1131 to db1173, now to prevent recurrence.
+*23:22 Replicas are finished moving to db1173. Amir1 begins the critical phase of the switchover, which requires another minute of read-only time.
+*23:24 s6 switchover complete.
+*23:27 Amir1 depools db1131.
+*23:47 Incident closed. [https://wikimedia.statuspage.io/incidents/hnm5c223c26v rzl resolves the statuspage incident.]
+
+==Detection==
+We were paged once for <code>Host db1131 #page is DOWN: PING CRITICAL - Packet loss = 100%</code> about three minutes after user impact began.
+
+We also got paged for <code>MariaDB Replica IO: s6 #page on db1173 is CRITICAL: CRITICAL slave_io_state Slave_IO_Running: No, Errno: 2003, Errmsg: error reconnecting to master repl@db1131.eqiad.wmnet:3306 - retry-time: 60 maximum-retries: 86400 message: Cant connect to MySQL server on db1131.eqiad.wmnet (110 Connection timed out)</code> and identical errors for db1098, db1113, and db1168. Those alerts were redundant but the volume wasn't unmanageable.
+
+==Conclusions==
+
+===What went well?===
+
+*The paging alerts for ping lossage on DB masters meant we got paged within a few minutes, with an immediately clear and actionable signal about the problem and severity.
+
+===What went poorly?===
+
+*The switchover script is slow to restore the site when a master is hard-down. It’s difficult to get the switchover script to skip its preflight checks, and moving individual replicas takes ~20 minutes, during which the affected section is still read-only. We were able to recover more quickly in this case by rebooting the host, but there’s no guarantee that works.
+
+===Where did we get lucky?===
+
+*Amir was available to respond promptly when paged at 12:40 AM, even though we have no DBAs in an appropriate time zone.
+*We were able to bring the machine back up, which shortened the outage. A different hardware failure could have left the machine offline, leaving s6 wikis read-only for the duration of the switchover process.
+
+==Links to relevant documentation==
+
+*[[MariaDB/troubleshooting#Emergency failover]]
+*[[MariaDB#Production section failover checklist]]
+
+==Actionables==
+
+*{{Phabricator|T320994}}: Check and replace the suspected-failed DIMM.
+*{{Phabricator|T196366}}: Implement (or refactor) a script to move replicas when the master is not available
+
+==Scorecard==
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+|Was the public status page updated?
+|yes
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|DC Ops task isn't assigned yet, but is routed to #ops-eqiad per their [[SRE/Dc-operations/Hardware Troubleshooting Runbook|process]]
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

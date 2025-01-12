@@ -1,0 +1,149 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T333347
+| paged-num = 0
+| responders-num = 4
+| coordinators = Eoghan, Jelto
+| start = 2023-05-02 08:14
+| end = 2023-05-02 08:24
+| impact = For approximately 10 minutes Phabricator tasks were not loading when GitLab was in maintenance mode.
+}}
+
+
+During a planned GitLab maintenance to switch the main GitLab host from codfw to eqiad Phabricator users noticed that they were not able to load tasks, instead seeing an ""Unhandled Exception ("RuntimeException")" message. 
+
+The following errors were observed in the logs:
+<syntaxhighlight lang="text">
+Invalid argument supplied for foreach()` `called at [<wmf-ext-misc>/src/customfields/GitLabPatchesCustomField.php:113]
+</syntaxhighlight>
+
+<syntaxhighlight lang="text">
+fatal: unable to access 'https://gitlab.wikimedia.org/toolforge-repos/toolpilot.git/': The requested URL returned error: 502
+</syntaxhighlight>
+
+
+Based on the above findings a decision was made to abandon the planned maintenance and take GitLab out of maintenance mode. This resulted in Phabricator tasks loading as expected, other than a short caching period for already open tasks.
+
+
+The most likely cause of the incident was a Phabricator widget deployed in [[phab:T324149|T324149]]{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*2023-03-15 21:36: GitLab Phabricator widget is deployed [[phab:T324149#8700128|T324149#8700128]]
+*2023-05-02 08:14 '''OUTAGE BEGINS:''' first notification of Phabricator outage on IRC
+*2023-05-02 08:20 Decision is made to stop the GitLab maintenance, GitLab is restarted to bring up all the services
+*2023-05-02 08:24 '''OUTAGE ENDS:''' confirmation that service has been restored
+*2023-05-04 17:12 Fix is deployed for Phabricator widget [[phab:T333347#8827402|T333347#8827402]]
+
+==Detection==
+The issue was brought to our attention by users in the #wikimedia-operations IRC channel. There were no automated alerts as the Phabricator service was up and pages were loading, but displaying an error instead of expected contents 
+
+==Conclusions ==
+
+===What went well?===
+
+* Stoping the maintenance and restoring the service was quick and straightforward
+* Fix was found and deployed fast
+
+===What went poorly?===
+
+* The Phabricator widget was deployed a few days after the previous longer GitLab maintenance (eqiad to codfw switch). Since then we had a few shorter downtimes (e.g. security updates) and even though they were noticed (see [[phab:T333347|T333347]]), they were brief enough to not show on our radar.
+* [[phab:T333347|T333347]] was not on teams radar
+
+===Where did we get lucky?===
+
+* There was a running conference call for the GitLab maintenance so it was easy to coordinate the troubleshooting, make a decision and restore service.
+* GitLab maintenance was not urgent and could be postponed to a later date
+* Phabricator errors were detected fast, easy rollback was possible at that point in the maintenance
+
+==Links to relevant documentation==
+
+* [[GitLab/Failover]]
+
+==Actionables==
+
+* [[phab:T333347|T333347]] will be used to troublehoot the widget behavior.
+* Maybe create blackbox checks for certain tasks? (like https://phabricator.wikimedia.org/T1)
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|No pages
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|No pages
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|No pages
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|No Google doc was necessary
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|[[phab:T333347|T333347]]
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|[[phab:T333347|T333347]] 
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|8
+|
+|}

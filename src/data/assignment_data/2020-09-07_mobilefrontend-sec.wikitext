@@ -1,0 +1,8 @@
+{{irdoc|status=final}}
+==Summary==
+A stored XSS security issue was reported, affecting talk pages in MobileFrontend. It was patched in production the same day.
+
+The issue and patch were publicly disclosed seven days later on 14 September, at [[phab:T262213|T262213]].
+
+==Actionables==
+(None)

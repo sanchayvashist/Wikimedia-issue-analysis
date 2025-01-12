@@ -1,0 +1,173 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T330422
+| paged-num = 6 ([https://portal.victorops.com/ui/wikimedia/incident/3435/details VictorOps incident 1], [https://portal.victorops.com/ui/wikimedia/incident/3436/details VictorOps incident 2])
+| responders-num = 4
+| coordinators = [[User:BCornwall|Brett Cornwall]]
+| start = 17:17
+| end = 17:42
+| impact = Minimal user-facing errors served
+}}
+
+db1127 was too busy to respond even to the simple statistics queries that the mysql prometheus exporter runs. The MariaDB query killer has a bug in 10.6.10 where queries were not properly killed. This was fixed in 10.6.12. db1127 was one of the remaining hosts to still be on 10.6.10.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+[https://sal.toolforge.org/production?p=2&q=&d=2023-02-23 SAL log]
+
+''All times in UTC.''
+
+* 17:17 - Splunk on-call page
+* 17:17 - brett acknowledges
+* 17:23 - Page automatically resolved by SYSTEM
+* 17:24 - Second page fires
+* 17:24 - brett acknowledges
+* 17:25 - DBs identified as culprit (<code><hnowlan> seems all s7</code>)
+* 17:26 - <code><cdanis> […] we're not [serving many errors] *yet*, but we need to figure out what's causing this and get it to stop</code>
+* 17:27 - Brett becomes IC
+* 17:29 - <code><cdanis> […] looks like db1127 is a bit out to lunch</code>
+* 17:31 - cdanis lowers db1127 weight from 400 to 200 via https://wikitech.wikimedia.org/wiki/Dbctl#Changing_weights_for_a_host (<+logmsgbot> !log cdanis@cumin1001 dbctl commit (dc=all): 'db1127 running very hot', diff saved to https://phabricator.wikimedia.org/P44752 and previous config saved to /var/cache/conftool/dbconfig/20230223-173127-cdanis.json)
+* 17:32 - <code><cdanis> if it doesn't improve shortly I'll depool it entirely</code>
+* 17:33 - <code><cdanis> […] I think it's mostly under control probably</code>
+* 17:36 - cdanis depools db1127 entirely (<code><+logmsgbot> !log cdanis@cumin1001 dbctl commit (dc=all): 'so hot right now', diff saved to https://phabricator.wikimedia.org/P44753 and previous config saved to /var/cache/conftool/dbconfig/20230223-173608-cdanis.json</code>)
+* 17:42 - Errors drop to pre-incident rates
+
+==Detection==
+
+Automated alert via [[VictorOps]]:
+
+<pre>
+Critical: PHPFPMTooBusy api_appserver (php7.4-fpm.service eqiad)
+
+https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=54&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad%20prometheus/ops&var-cluster=api_appserver The MediaWiki cluster api_appserver in eqiad is experiencing saturation of php7.4-fpm.service workers 9.851% https://bit.ly/wmf-fpmsat Not enough idle php7.4-fpm.service workers for Mediawiki api_appserver at eqiad #page
+Alerts Firing:
+Labels:
+ - alertname = PHPFPMTooBusy
+ - cluster = api_appserver
+ - prometheus = ops
+ - service = php7.4-fpm.service
+ - severity = page
+ - site = eqiad
+ - source = prometheus
+ - team = sre
+Annotations:
+ - dashboard = https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?panelId=54&fullscreen&orgId=1&from=now-3h&to=now&var-datasource=eqiad%20prometheus/ops&var-cluster=api_appserver
+ - description = The MediaWiki cluster api_appserver in eqiad is experiencing saturation of php7.4-fpm.service workers 9.851%
+ - runbook = https://bit.ly/wmf-fpmsat
+ - summary = Not enough idle php7.4-fpm.service workers for Mediawiki api_appserver at eqiad #page
+Source: https://prometheus-eqiad.wikimedia.org/ops/graph?g0.expr=sum+by%28cluster%2C+service%29+%28phpfpm_statustext_processes%7Bcluster%3D~%22%28api_appserver%7Cappserver%7Cparsoid%29%22%2Cstate%3D%22idle%22%7D%29+%2F+sum+by%28cluster%2C+service%29+%28phpfpm_statustext_processes%7Bcluster%3D~%22%28api_appserver%7Cappserver%7Cparsoid%29%22%7D%29+%3C%3D+0.3&g0.tab=1
+</pre>
+
+
+=== Graphs ===
+<gallery>
+File:2023-02-23 mysql global status threads.png|MySQL global status threads
+File:2023-03-06 db worst response times.png|DB worst response times
+File:2023-02-23 db open connections.png|DB open connections
+File:2023-03-06 DB open connections 2.png|DB open connections
+File:2023-02-23 php active vs idle workers.png|PHP active vs idle workers
+File:2023-02-23 5xx percentage by http method.png|5XX percentage by HTTP method
+File:2023-02-23 status code 5xx 2.png|5XX status codes
+</gallery>
+
+==Conclusions ==
+
+===What went well?===
+
+* Detection of the issue
+* Identification of the issue
+* Remedy of the issue before it became a larger problem
+
+===What went poorly?===
+
+===Where did we get lucky?===
+
+==Links to relevant documentation==
+
+==Actionables==
+
+* Report this issue upstream ([https://jira.mariadb.org/browse/MDEV-30760 MDEV-30760]) {{done}}
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|https://phabricator.wikimedia.org/T330422
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|12
+|
+|}

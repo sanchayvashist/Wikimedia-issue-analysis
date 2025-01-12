@@ -1,0 +1,108 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+From 10:28 to 11:43, Wikimedia Commons was unavailable and/or slow to respond. Additionally, from 10:41 to 11:10, commons was set in unscheduled read only mode (unable to create new users, upload files or edit pages). The immediate cause was large amount of InnoDB contention for read and write queries on the primary s4 database (which serves commonswiki and testcommonswiki writes). After a restart and a forced kill, the database came back cleanly in read only mode. Global usage extension was temporarily disabled (several queries were observed from this extension blocked on the master) before the server was set back up in read write, ending the incident. 
+
+GlobalUsage was signaled as the most probable cause, as it was sending large amount of long-running queries at the moment of the issue to the primary DB server. Because of the general InnoDB error obtained -contention on an Innodb index (on an engine where everything, including data, are indexes)- it is difficult to say if this was the primary cause, or another underlying cause caused them to block, leading the the outage. Other scaling problems are known to occur on commonswiki (e.g. large image table). Work has been done to send as much traffic as possible to the replicas.
+{{TOC|align=right}}
+
+== Timeline ==
+
+'''All times in UTC.'''
+
+* 10:29: '''Incident starts'''
+* 10:29: InnoDB Monitor starts to warn about threadpool blocked
+* 10:33: received Alerts relating to Mysql replication on S4
+* 10:33: DBAs and SREs show up
+* 10:38: started to receive multiple alerts relating to Restbase
+* 10:38: The master looks overloaded with 10k connections stuck: attempts to kill all select queries on the master
+* 10:38: Incident opened. '''Jbond becomes IC.''' 
+* 10:41: switched commons (s4) to read only via dbctl
+* 10:42: restarts master
+* 10:43: receive alerts for mysql replication again
+* 10:45: high latency on mediawiki api
+* 10:47: Replication status all seem to be at [https://phabricator.wikimedia.org/P15586 432521631] (this means we were in a good position to failover to a candidate master if needed).
+* 10:50: master still restarting
+* 10:52: During the master overload it was observed thousands of selects like the following but it is not clear whether this was the cause or the consequence: 
+<syntaxhighlight lang='sql'>
+SELECT /* MediaWiki\Extension\GlobalUsage\GlobalUsage::getLinksFromPage Abraham */  gil_to  FROM `globalimagelinks`    WHERE gil_wiki = 'plwiktionary' AND gil_page = 852538 
+</syntaxhighlight>
+* 10:55: master still/stuck restarting
+* 10:55: discuss kill mysql and let the recovery do its thing
+* 10:56: observed a ton of innodb contention errors:  Writer thread waiting semaphore, could this too be effect?
+* 10:56: kill mysql process
+* 10:57: start mysql process
+* 10:57: Observed I think a lot of LinksUpdate operations caused the globalusage queries, which  overloaded master
+* 10:58: InnoDB: Restoring possible half-written data pages from the doublewrite buffer
+* 10:58: mysql is now doing its innodb recovery and rollback
+* 10:59: innodb recovery finish (s4 master still RO)
+* 10:59: Reports that page deletes on eswiki are failing (globalusage blocks deletion because commons is ro)
+* 11:07: disable globalusage extension
+* 11:07: nothing interesting in raid and dmesg, nothing there
+* 11:10: enable Read Write on S4 database
+* 11:13: add message to village pump
+* 11:14: master is behaving fine
+* 11:15: '''User viable issues resolved'''
+* 11:45: '''incident officially closed'''
+
+== Detection ==
+* 10:33: received Alerts relating to Mysql replication on S4
+ PROBLEM - MariaDB Replica IO: s4 #page on db1143 is CRITICAL: CRITICAL slave_io_state 
+          Slave_IO_Running: No, Errno: 2013, Errmsg: error reconnecting to master repl@db1138.eqiad.wmnet:3306 - 
+          retry-time: 60 maximum-retries: 86400 message: Lost connection to MySQL server at waiting for initial 
+          communication packet, system error: 110 Connection timed out 
+          https://wikitech.wikimedia.org/wiki/MariaDB/troubleshooting%23Depooling_a_replica
+
+* 10:33: The master was quickly identified as the source of problems
+
+On the database error log, it was seen:
+
+ Apr 27 10:29:59 db1138 mysqld[3848]: 2021-04-27 10:29:59 139919263487744 [Note] Threadpool has  
+ been blocked for 30 seconds
+ Apr 27 10:30:14 db1138 mysqld[3848]: InnoDB: Warning: a long semaphore wait:
+ Apr 27 10:30:14 db1138 mysqld[3848]: --Thread 139901381777152 has waited at fut0fut.ic line 51  
+ for 241.00 seconds the semaphore:
+ Apr 27 10:30:14 db1138 mysqld[3848]: X-lock on RW-latch at 0x7f51d3e0c898 '&block->lock'
+ Apr 27 10:30:14 db1138 mysqld[3848]: a writer (thread id 139927395628800) has reserved it in mo
+ de  exclusive
+ Apr 27 10:30:14 db1138 mysqld[3848]: number of readers 0, waiters flag 1, lock_word: 0
+ Apr 27 10:30:14 db1138 mysqld[3848]: Last time read locked in file row0sel.cc line 3075
+ Apr 27 10:30:14 db1138 mysqld[3848]: Last time write locked in file buf0buf.cc line 4279
+ Apr 27 10:30:14 db1138 mysqld[3848]: Holder thread 0 file not yet reserved line 0
+
+Which ended up blocking any operation, even killing threads for a clean shutdown.
+
+== Conclusions ==
+
+=== What went well? ===
+* Response only took a few seconds after the page
+* Automated monitoring detected the action
+* able to recover latency issues by expediting a switch to RO
+* once Mysql was killed recovery was very quick
+
+=== What went poorly? ===
+* There are a few options for root causes (GlobalImageLinks, size of the image table, internal state corruptin), but none can be set definitively as the only culprit so far
+
+=== Where did we get lucky? ===
+* Incident ocurred during European mid day meaning many SRE and experienced MW developers where available to assist
+* The master was able to come back clean after the recovery
+
+=== How many people were involved in the remediation? ===
+* 3 SRE's
+* 2 Software developers
+* 1 incident Coordinator
+
+== Links to relevant documentation ==
+<mark>Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.</mark>
+
+== Actionables ==
+* [https://phabricator.wikimedia.org/T281261 update icinga alert link]
+* [https://phabricator.wikimedia.org/T281238 Disable GlobalUsage does selects on the master database]
+* [https://phabricator.wikimedia.org/T281240 update documentation for Changeprop]
+* [https://phabricator.wikimedia.org/T281242 Re-enable globalusage]
+* [https://phabricator.wikimedia.org/T281249 Modify an existing tool that quickly shows the db replication status]

@@ -1,0 +1,201 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T323262
+| paged-num = -
+| responders-num = 4ish
+| coordinators = -
+| start = 2022-11-17 09:00:00
+| end = 2022-11-17 12:00:00
+| metrics = No relevant SLOs exist. [https://grafana.wikimedia.org/d/MeOVgCPWz/process-upstream?orgId=1&from=1668664635159&to=1668693908620 Uptime interruptions for 2+ hours]
+| impact = Gerrit was unavailable for almost three hours
+}}
+
+An upgrade of Gerrit from 3.4.8 to 3.5.4 was scheduled on November 17th at 9:00 UTC. After the upgrade, the root partition filled up causing Gerrit to no longer be able to write to its indexes. The first symptoms were inability to write a comment or cast a vote. The service got stopped entirely to relocate Gerrit data to a dedicated partition. The upgraded Gerrit was back at 11:45 UTC.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+[https://sal.toolforge.org/production?p=0&q=gerrit&d=2022-11-17 Sal entries mentioning Gerrit on November 17th 2022].
+
+''All times in UTC.''
+
+The synchronization occurred in <code>#wikimedia-operations</code>. Some specific events related to the service have their timestamps highlighted in bold ('''##:##''').
+
+*'''09:00''' Maintenance window starts
+*09:00 Icinga monitoring is disabled for both gerrit1001 and gerrit2002 hosts
+*09:04 Deployment to gerrit2002 (replica)
+*09:07 gerrit-replica on gerrit2002 is upgraded to 3.5.4
+*09:10 Deployment to gerrit1001 (primary)
+*09:12 gerrit on gerrit1001 is upgraded to 3.5.4
+*09:14 '''Valentin''' mentions pages only having the header/footer. It is assumed it is a web browser cache issue since it works for others. Antoine witnessed similar issues locally and on WMCS devtools when preparing the upgrade.
+*'''09:34''' (found after the facts) '''Outage begins.''' Indexing stops processing. The root partition is full. Gerrit is unable to write updates made to change in the index.
+*09:36 After monitoring various metrics for 20 minutes, '''Antoine''' (erroneously) claims the service to be operational. Gerrit is still online, reindexing all changes
+*09:36 '''Timo''' reports he is unable to do any write action (submit +2, rebase, remove +2 vote). He get a modal window error stating there is a 500 Internal Server Error. Antoine had not yet checked the logs.
+*09:40 '''Antoine''' reports <code>java.io.IOException: No space left on device</code>. The root partition is full.
+*09:42 some files are deleted and Antoine suggests moving the <code>cache</code> directory to the larger <code>/srv</code> partition.
+*09:44 '''Thiemo Kreuz''' sends an [[https://lists.wikimedia.org/hyperkitty/list/wikitech-l@lists.wikimedia.org/thread/55CC4WNUBPRYPNSJSGSF62WFNL3FFLWW/ | error report on wikitech-l]]
+*09:49 A thread holds a lock on the <code>gerrit_file_diff</code> disk cache <code>org.h2.jdbc.JdbcSQLException: Timeout trying to lock table "DATA"; SQL statement:</code>. On disk there is an extra half written file.
+*'''09:52''' '''Antoine stops Gerrit''' to flush the lock and do a full offline reindex of all changes.
+*09:56 Various Icinga probes start alerting due to <code>git fetch</code> failing in some units
+*09:59 Indexing 33% done
+*10:04 Indexing 72% done (a lot of changes already got reindexed when Gerrit 3.5.4 was up (09:12 to 09:52)).
+*10:17 Indexing 80% done
+*10:19 '''Antoine''' keeps freeing old files from <code>/srv</code> and from the root partition
+*10:22 Indexed 684k changes out of 847k
+*10:43 Indexing 83% done
+*10:58 Indexing 99% done
+*10:59 Indexing of <code>changes</code> change has completed with 203 failed task. Disk space errors surfaced, causing the root partition to run out of disk space again.
+*'''11:00''' The indexing being interrupted, there is nothing locking the caches and Puppet (or systemd) '''brings back Gerrit'''.  The root partition only has 2GB left.
+*11:06 '''Giuseppe''' offers SRE help and they take over from there
+*11:10 '''Filippo''' mentions there is 80G free in the volume group.
+*11:11 git_file_diff.h2.db is 8G, gerrit_file_diff.h2.db is 12G
+*11:17 '''Giuseppe''' asks, "should we do a failover?" It is ruled out cause it hasn't been done in a while and seems simpler to give more disk space immediately.
+*11:26 We have considered flushing the cache but <code>gerrit flush-cache</code> only flushes the in-memory cache.  <code>gerrit.war init</code> has a parameter to delete all disk caches but we never used it.
+*'''Giuseppe''' and '''Clément''' discuss to determine which directory(ies) to relocate and how to do it.
+*11:26 '''Clément''' creates and mounts a 50G lv to host Gerrit data (<code>/var/lib/gerrit2</code>) and starts presync
+*11:34 Presync is done and '''Antoine''' stops Gerrit for last <code>rsync</code>
+*11:36 '''Lukasz''' asks whether a tracking task has been filed. He files {{phabricator|T323262}}
+*11:40 '''Clément''' <code>rsync</code> of Gerrit data has completed
+*11:44 <code>/var/lib/gerrit2</code> is replaced by the rsynced partition
+*'''11:45''' '''Clément''' runs Puppet to bring back the Gerrit service
+
+==Detection==
+
+The first report was at 9:16 by Valentin. He was getting no content beside header/footer in https://gerrit.wikimedia.org/r/dashboard/self . Same for https://gerrit.wikimedia.org/r/q/status:open+-is:wip . It was unclear whether it was related and it got dismissed based on browser caches being out of sync.
+
+Timo reports at 10:36 that no write action works. It is when the root partition had filled.
+
+Icinga alerts did not trigger since [[Gerrit/Upgrade#Deploying]] asks to put both hosts in maintenance mode, hence none of the probes (such as the disk space check) emit any alarm.
+
+==After the fact graphs==
+
+<gallery mode="nolines" widths="400px" perrow="2">
+File:2022117 gerrit queue index.png | Number of indexing tasks in Gerrit. 09:13 is the initial start. At 09:34 the root partition is full and the tasks can not process anymore.11:00 after the offline reindex got stopped. Gerrit went back up and did online indexing.
+
+File:20221117 filesystems utilization.png | Filesystems utilization on gerrit 1001 between 09:00 and 12:00 UTC. Orange is the root partition which files up as online indexing is occurring. At 09:36 it is full. Yellow is the new /mnt partition which was used to copy /var/lib/gerrit2 between 11:25 and 11:37.
+
+11:42 Gerrit is stopped, data rsynced again and deleted. /mnt is remounted as /var/lib/gerrit2]]
+
+File:20221117 gerrit cpu utilization.png  | Changes indexing is heavily CPU bounded. The high CPU usage reflects indexing going. The large one from ~ 10:00 to 11:00 is the offline reindexing.
+
+File:20221117 gerrit root partition 2days.png | Gerrit root partition utilization over two days
+</gallery>
+
+==Conclusions ==
+
+* When a full reindexing of changes, it would probably be better to conduct the upgrade very early in the UTC morning or over the week-end.
+* The upgrade procedure requests to disable the Icinga monitoring at the host level. As a side effect it also disables the disk space checks.
+* The H2 databases have probably been carried over since we originally started Gerrit. It is unclear whether they should be so large. Antoine is puzzled by <code>gerrit show-caches</code> output which reports <code>gerrit_file_diff</code> to have <code>Space: 134.20m</code> but the corresponding H2 database file <code>gerrit_file_diff.h2.db</code> file was 12 GBytes.
+* Relocating the large files to a dedicated partition was the fix
+===What went well?===
+
+* Nice coordination toward a solution
+* We have plenty of logs and metrics
+
+===What went poorly?===
+
+* Monitoring (Icinga) was entirely disabled
+* Antoine was not actively watching the logs after the upgrade
+* The Gerrit variable disk cache files should have been on a larger partition (<root>/srv</root>)
+
+===Where did we get lucky?===
+
+* The server had 80G of extra disk space in the volume group letting us quickly relocate the huge files to a fresh new dedicated partition.
+* There were apparently no other issues caused by the 3.4 to 3.5 Gerrit upgrade. It all boiled down to a full partition.
+
+==Links to relevant documentation==
+
+* Gerrit upgrade runbook [[Gerrit/Upgrade#Deploying]]
+* {{phabricator|T307334}} Upgrade to Gerrit 3.5
+* wikitech-l thread about the upgrade https://lists.wikimedia.org/hyperkitty/list/wikitech-l@lists.wikimedia.org/thread/55CC4WNUBPRYPNSJSGSF62WFNL3FFLWW/
+
+==Actionables==
+
+* {{phabricator|T333143}} Move Gerrit data out of root partition
+* {{phabricator|T323754}} Investigate why the H2 database files are so large
+* <s>Document the new partition layout?</s> (partition to be removed after data get moved)
+* Check with SRE collab about the partitioning scheme on gerrit1001 since the root partition is not LVM managed.
+* 2022-12-16 wrote a blog post [https://phabricator.wikimedia.org/J300 Phame > Doing the needful > Shrinking H2 database files]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+| Yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+| Yes
+|
+|-
+|Were fewer than five people paged?
+| No
+| No people was paged at all.
+|-
+|Were pages routed to the correct sub-team(s)?
+| No
+| No people was paged at all/alerts were disabled.
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+| No
+| No people was paged at all.
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+| No
+|
+|-
+| Was the public status page updated? 
+| No
+| Internal people was kept up to date prudently on both Wikitech-l, Slack and IRC
+|-
+|Is there a phabricator task for the incident?
+| Yes
+|
+|-
+|Are the documented action items assigned?
+| No
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+| Yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+| Yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+| Yes
+| Over IRC
+|-
+|Did existing monitoring notify the initial responders?
+| No
+| Monitoring was disabled
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+| Yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+| No
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+| 7
+|
+|}

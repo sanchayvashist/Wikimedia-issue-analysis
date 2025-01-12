@@ -1,0 +1,32 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+Network in the kubernetes cluster was briefly disrupted due to a rolling restart of calico pods. For 2 minutes, all service in kubernetes were unreachable. That manifested in elevated errors rates and latencies in mediawiki among other things as mediawiki relies on many of those service, e.g. sessionstore.
+
+The incident was the result of an operator forcing a rolling restart of all pods in all namespaces (in order to pickup a docker configuration change), a process that has been done multiple times in the past and never caused issues. The process works by deleting the old pods one by one. It is without much risk mainly because:
+
+* Each delete depools first the pod, draining it of traffic
+* The pod is asked to stop first and then is killed and deleted
+* In the meantime a new pod has been spun up, probably in a different node, has run the initialization process and is ready to receive traffic
+* The initialization process of almost all our services is very fast.
+
+However this time around, the process fell on a race condition when it entered the '''kube-system''' namespace, which contains the components that are responsible for the networking of kubernetes pods. All calico node pods were successfully restarted, however before they had enough time to initialize and perform their BGP peering with the Core routers (cr*-eqiad.wikimedia.org), a component they rely on called [https://docs.projectcalico.org/reference/typha/overview calico typha] was also restarted. Unfortunately we run only 1 replica of the typha workload. The new replica was scheduled in a new node that did not have the image yet on the OCI imagefs. Enough time elapsed while the image was being fetched and the new pod started by the kubelet that the graceful BGP timers on the core routers expired, forcing the core routers to withdraw from their routing tables the IPv4/IPv6 prefixes for the pod networks, leading to them becoming unreachable. The typha pod started up eventually, calico node pods managed to connect to it, fetched their configuration and BGP peered with the core routers re-announcing their pod IPv4/IPv6 prefixes. Routing was restored and the outage ended. No operator action was necessary to fix the issue, the platform auto-healed.
+
+On the plus side, due to this (crude admittedly) form of chaos engineering, we found out a change in our kubernetes clusters and a need to amend our process.
+
+'''Impact''': For 2 minutes fetches to mediawiki resulted in higher error rates, up to 8.51% for POSTs and elevated latencies for GETs (p99 at 3.82s). Some 1500 edits failed (although there is duplication there, those are not unique edits). Those seem to have happened later, when the services were restored. Kafka logging lag increased temporarily.
+
+'''Documentation''':
+
+* [https://grafana.wikimedia.org/d/000000208/edit-count?viewPanel=13&orgId=1&from=1632911315744&to=1632913750652 Save failures graphs]
+* [https://grafana.wikimedia.org/d/000001590/sessionstore?orgId=1&var-dc=thanos&var-site=eqiad&var-service=sessionstore&var-prometheus=k8s&var-container_name=kask-production&from=1632912485692&to=1632912811172 Sessionstore graphs]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1632911211615&to=1632913728120 Appservers graphs]
+
+== Actionables ==
+* TODO: Document the rolling pod restart procedure and skip kube-system namespace
+*<s>Investigate whether running >1 replicas of calico-typha is feasible and prudent. [[phab:T292077|T292077]]</s>

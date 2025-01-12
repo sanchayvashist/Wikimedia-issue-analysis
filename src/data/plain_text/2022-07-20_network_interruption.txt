@@ -1,0 +1,49 @@
+
+
+==Summary==
+
+
+At 03:16, the top-of-rack switch asw2-c-eqiad virtual chassis lost connectivity to FPC5, partitioning the network. This caused a hard down event for all hosts in rack C5 (netbox). It also caused additional instability due to how the virtual chassis works, and because it's incorrectly cabled up.
+
+We received a burst of both paging and non-paging alerts: Icinga reporting hosts down; BGP status; application-level errors; and MariaDB replica alerts. At least one user also reported via IRC that they couldn't access metawiki (almost certainly uncacheable traffic, due to logged-in state).
+
+At 03:22, asw2-c-eqiad:fpc5 came back online. Most systems recovered automatically, but some needed manual attention:
+
+* We received HAProxy failover alerts on dbproxy1018 through 1021, and those needed to be resolved by reloading haproxy manually, as expected.
+* Phabricator's dbproxy had failed over to a read-only replica (as expected) but Phabricator was unavailable for read-only tasks in read-only mode. When users attempted to view a task, they got an error page saying, Unhandled Exception ("AphrontQuery Exception") #1290: The MariaDB server is running with the --read-only option so it cannot execute this statement This was resolved by reloading haproxy, but Phab was expected to be available for reads.
+* The Kubernetes API server alerted for high latency until kube-apiserver was manually restarted on both hosts. 
+Documentation:
+
+* Grafana dashboard: Home
+
+==Actionables==
+
+*T313384 Recable eqiad row C switch fabric, so that in the future a failure like this will only impact servers in rack C5.
+*T313382#8090176 Move critical hosts, like DB masters, away from rack C5 until its top-of-rack switch is trustworthy.
+* T313382#8090224 Add LibreNMS alerting (and runbook) for this scenario, which will speed up troubleshooting.
+*T313879 Make read-only Phabricator operations possible when its database is in read-only mode.
+
+==Scorecard==
+
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	no 	The IC was able to respond effectively to the downstream failures (DB, appservers, Phab, k8s, etc) but wasn't able to identify the root cause or troubleshoot in LibreNMS effectively due to lack of familiarity.
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	
+Process                                       	Was the incident status section actively updated during the incident?                                             	no 	Only one SRE responded during the incident, so the incident doc was created afterward, to organize the timeline and followup items.
+Process                                       	Was the public status page updated?                                                                               	no 	Not justified given the impact
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	no 	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	no 	Reading Phab tasks for context was impossible due to its being unavailable in RO mode
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	yes	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	7  	

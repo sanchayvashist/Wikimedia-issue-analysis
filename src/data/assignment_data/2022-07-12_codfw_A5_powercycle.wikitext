@@ -1,0 +1,107 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = T309957
+| paged-num = 26
+| responders-num = 9
+| coordinators = Brandon Black
+| start = 2022-07-12 15:45:00
+| end = 2022-07-12 16:00:00
+| impact = No apparent user-facing impact, but lots of internal clean up, e.g. for Ganeti VMs.
+}}During the scheduled maintenance to upgrade the PDUs in rack A5, CyrusOne flipped the incorrect breaker on the breaker panel, prior to pulling the PDU's power cord out from its circuit.  This resulted in all servers in rack A5 losing power to both its primary and secondary power feeds.  The affected hardware in rack A5 booted back up, once CyrusOne realized the mistake and flipped the breaker back on.
+
+* 15:45 <+icinga-wm> PROBLEM - Host graphite2003 #page is DOWN: PING CRITICAL - Packet loss = 100%
+* 15:45 <+icinga-wm> PROBLEM - Host maps2005 is DOWN: PING CRITICAL - Packet loss = 100%
+* 15:55 <+icinga-wm> PROBLEM - MariaDB read only s8 #page on db2079 is CRITICAL: Could not connect to localhost:3306
+* 15:56 <+icinga-wm> PROBLEM - MariaDB read only m1 #page on db2132 is CRITICAL: Could not connect to localhost:3306
+* ..
+* 16:00 <+icinga-wm> RECOVERY - MariaDB read only s8 #page on db2079 is OK
+
+== Actionable ==
+
+* As a remediation item, the remaining PDU maintenances at codfw will no longer be hot-swapped with live equipment.  After 3 of 5 inadvertent incidents, Dc-Ops team deemed it would be safer to coordinate with the SREs for hard downtime for all the affected servers in each rack.  This would result in the graceful shutdown of affected servers, and allow for a shorter duration to complete each PDU upgrade with a temporary hired contractor.
+
+== See also ==
+
+* [[Incidents/2022-06-30 asw-a4-codfw accidental power cycle]]
+* [[Incidents/2022-06-21 asw-a2-codfw accidental power cycle]]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|no
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service?
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|7
+|
+|}

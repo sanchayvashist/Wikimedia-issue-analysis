@@ -1,0 +1,142 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T309649
+| paged-num = 3
+| responders-num = 4
+| coordinators = Andrew Otto
+| start = 2022-05-31 17:09:10
+| end = ~2022-05-31 18:00:00
+| impact = A component of our Hadoop HDFS distributed file system called the NameNode failed, on both the primary and standby server. This caused all HDFS writes and reads to fail.
+
+There was no public-facing impact to this incident, so the users involved are those in the various WMF data teams who use tools such as Hive, Spark, Jupyter, Superset etc.
+
+In addition to these interactive users, several scheduled ingestion pipelines that read from or write to HDFS were also broken for the duration of the incident. 
+
+After recovery of the namenodes, regular ingestion from Kafka was resumed from the point where it stopped. Therefore there was no lasting impact nor data loss as a result of this incident.
+}}
+<!-- Reminder: No private information on this page! -->
+* At Tue May 31 17:09:10 UTC 2022 analytics-alerts@wikimedia.org received an email alert: "At least one Hadoop HDFS NameNode is active is CRITICAL"
+* Otto, Btullis, Joal, and Mforns jumped in hangout to troubleshoot.
+* /var/lib/hadoop/journal on all 5 journalnodes was full
+* Otto and Btullis stopped namenodes and journalnodes
+* Btullis increases <code>/var/lib/hadoop/journal</code> on journalnodes from 10 GB to 30 GB
+* Btullis starts journalnodes, then master namenode.
+* Otto forces HDFS to stay in safe mode.
+* Wait for master namenode to apply edits from journalnodes.
+* Start standby namenode
+* Wait for standby namenode to apply edits
+* Otto allows HDFS to leave safe mode.
+
+'''Documentation''':
+
+Cause analysis:
+
+On Sunday evening May 22, <code>/srv</code> filled up on an-master1002. an-master1002 takes daily fs image snapshots, and saves them in <code>/srv/backup/hadoop/namenode</code>, keeping the last 20.  Over time, as the number of HDFS blocks has increased, so has the size of these backup images.  
+
+We received an alert email for a failure of the <code>hadoop-namenode-backup-fetchimage</code> that takes these backups with the subject "''an-master1002/Check unit status of hadoop-namenode-backup-fetchimage is CRITICAL''".
+
+24 hours later, this backup job succeeded, even if no new image backup was taken, and we got a RECOVERY status email for this job.  Otto was on ops week, and only working half days this week.  Otto most likely saw the RECOVERY email and ignored the alert.
+
+On Tuesday May 31, <code>/var/lib/hadoop/journal</code> on all journalnodes completely filled, and NameNodes crashed as they were not able to get ACKs from the journalnodes that their writes had been saved.
+
+We believe that after <code>/srv/backup/hadoop/namenode</code> filled up on May 22, the standby NameNode was no longer able to save its image to <code>/srv/hadoop/name/current</code>.  Because no new image was saved, the hadoop-namenode-backup-fetchimage did not detect that a new image was present, it did not try to take a new backup.  The hadoop-namenode-backup-prune kept purning backup files older than 20 days, freeing up space on the <code>/srv</code> partition.  
+
+However, because the standby NameNode was not able to save its FS images snapshots, JournalNodes were not able to clear up historical edits files, which caused ''them'' to fill up their journal partitions.
+
+After the NameNodes were recovered and out of safe mode, writes could proceed.  All ingestion is handled either via Kafka or periodic jobs, and these can resume from where they left off.  No lasting impact.
+
+==Actionables==
+
+The following ticket contains all actionable items. https://phabricator.wikimedia.org/T309649
+
+These are:
+
+* Make old journalnode edits files are cleaned properly now that namenodes are back online and saving fs image snapshots.
+* Reduce <code>profile::hadoop::backup::namenode::fsimage_retention_days</code>, 20 is too many
+* Create an alert for the freshness of the standby namenode's FSImage dump in <code>/srv/hadoop/name/current</code>
+* Make sure journalnodes alert sooner about disk journalnode partition
+* Check that bacula backups of fs image snapshots are available and usable
+* Check that the alerting for disk space is correct on an-master hosts - since we seem not to have been alerted to <code>/srv/</code> becoming full on an-master1002
+
+All have now been completed.
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|Yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|Yes
+|
+|-
+|Were fewer than five people paged?
+|Yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|Yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|Yes
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|Yes
+|
+|-
+|Was the public status page updated?
+|n/a
+|This is not a public-facing service, but we notified users of HDFS via email, Slack and IRC.
+|-
+|Is there a phabricator task for the incident?
+|Yes
+|
+|-
+|Are the documented action items assigned?
+|Yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|Yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|Yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|Yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|No
+|Monitoring has been updated to inform the Data Engineering team for all relevant services.
+|-
+|Were all engineering tools required available and in service?
+|Yes
+|
+|-
+|Was there a runbook for all known issues present?
+|Yes
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|13
+|
+|}

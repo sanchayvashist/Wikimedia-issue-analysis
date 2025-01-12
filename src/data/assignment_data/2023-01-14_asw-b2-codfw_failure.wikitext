@@ -1,0 +1,200 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T327001
+| paged-num = Everyone (batphone)
+| responders-num = 5 (3 SRE, 2 volunteers)
+| coordinators = None
+| start = 2023-01-14 08:17:00
+| end = 2023-01-14 10:38:00
+| impact = No user-facing impact; reduced redundancy (and inability to make some changes).
+}}
+
+…
+
+Switch asw-b2-codfw failed; asw-b-codfw master failed over to b7 as designed. This, however, left all the systems in B2 offline. A volunteer noticed the alerts, and used Klaxon. We were unable to restore asw-b2-codfw to service, and depooled the swift and thanos frontends in B2. This left us operational, but at reduced redundancy. 
+
+A further complication was that lvs2008 reaches all of row B via asw-b2-codfw, which meant that trying to change things in codfw on Monday was difficult; as a result of which mediawiki in codfw was depooled until asw-b2-codfw could be replaced.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+''All times in UTC.''
+
+*08:18 asw-b2-codfw fails, hosts in B2 alert as DOWN '''OUTAGE BEGINS'''
+*08:21 asw-b-codfw.mgmt.codfw.wmnet - virtual-chassis crash alert
+*08:28 asw-b-codfw.mgmt.codfw.wmnet recovered from virtual-chassis crash [failover to B7 complete?]
+*08:35 volunteer (RhinosF1) pings a SRE on IRC (_joe_)
+*08:43 volunteer opens https://phabricator.wikimedia.org/T327001 at UBN
+*08:58 second volunteer (taavi) announces they will Klaxon
+*09:01 VO pages batphone
+*09:08 first SRE (godog) responds
+*09:17 Emperor depools ms-fe-2010 and thanos-fe2001
+*09:47 having determined we don't have a switchable PDU that would enable a powercycle, godog issues `request system reboot member 2` as a last-ditch attempt to restart the failed device. This fails.
+*10:00 godog emails dc-ops about the failure, noting lack of user impact; notes SRE can't remote power-cycle the device, suggests it can probably wait until Monday, asks for confirmation.
+*10:21 XioNoX confirms switch console nonresponsive, all remote options exhausted, next step is replace and RMA switch (since even if we could power it back on at this point, it should be considered likely-to-fail-again).
+*10:38 confirmed normal operations with reduced redundancy, no further action needed until next business day '''OUTAGE ENDS'''
+*18:48 replacement switch put into place, but not configured
+
+==Detection==
+
+Automated monitoring detected the outage, a human made the decision to Klaxon.
+
+<pre>
+<icinga-wm> PROBLEM - Host cp2031 is DOWN: PING CRITICAL - Packet loss = 100%
+<icinga-wm> PROBLEM - Host ms-be2046 is DOWN: PING CRITICAL - Packet loss =
+<icinga-wm> PROBLEM - Host elastic2041 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host kafka-logging2002 is DOWN: PING CRITICAL - Packet
+	    loss = 100%
+<icinga-wm> PROBLEM - Host mc2043 is DOWN: PING CRITICAL - Packet loss = 100%
+<icinga-wm> PROBLEM - Host thanos-fe2002 is DOWN: PING CRITICAL - Packet loss
+	    = 100%
+<icinga-wm> PROBLEM - Host elastic2063 is DOWN: PING CRITICAL - Packet loss =
+	    100%  [08:19]
+<icinga-wm> PROBLEM - Host cp2032 is DOWN: PING CRITICAL - Packet loss = 100%
+<icinga-wm> PROBLEM - Host elastic2064 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host elastic2057 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host lvs2008 is DOWN: PING CRITICAL - Packet loss = 100%
+<icinga-wm> PROBLEM - Host elastic2077 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host elastic2078 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host mc2042 is DOWN: PING CRITICAL - Packet loss = 100%
+<icinga-wm> PROBLEM - Host ms-fe2010 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host ms-be2041 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host ml-cache2002 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - Host elastic2042 is DOWN: PING CRITICAL - Packet loss =
+	    100%
+<icinga-wm> PROBLEM - BGP status on cr1-codfw is CRITICAL: BGP CRITICAL -
+	    AS64600/IPv4: Connect - PyBal
+	    https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status
+<icinga-wm> PROBLEM - Router interfaces on cr1-codfw is CRITICAL: CRITICAL:
+	    host 208.80.153.192, interfaces up: 127, down: 2, dormant: 0,
+	    excluded: 0, unused: 0:
+	    https://wikitech.wikimedia.org/wiki/Network_monitoring%23Router_interface_down
+<icinga-wm> PROBLEM - Juniper virtual chassis ports on asw-b-codfw is
+	    CRITICAL: CRIT: Down: 7 Unknown: 0
+	    https://wikitech.wikimedia.org/wiki/Network_monitoring%23VCP_status
+<icinga-wm> PROBLEM - BGP status on cr2-codfw is CRITICAL: BGP CRITICAL -
+	    AS64600/IPv4: Connect - PyBal
+	    https://wikitech.wikimedia.org/wiki/Network_monitoring%23BGP_status
+<jinxer-wm> (virtual-chassis crash) firing: Alert for device
+	    asw-b-codfw.mgmt.codfw.wmnet - virtual-chassis crash   -
+	    https://alerts.wikimedia.org/?q=alertname%3Dvirtual-chassis+crash
+</pre>
+
+The initial DOWN alerts came before alerting picked up the switch failure; in an ideal world we would have picked up the switch failure and not separately alerted about the dependent hosts.
+
+It's not clear if a switch failing should page, given we are able to continue without one.
+
+===What went well?===
+
+* Switch failure worked as designed
+* Correct redundancy arrangements of hosts & services, thus:
+* No user impact
+
+===What went poorly?===
+
+* The [[Network monitoring#virtual-chassis crash|runbook]] wasn't linked directly from the alert and thus wasn't found by first responders
+* Escalation path (DCops manager) not clear on how to engage codfw smart hands out of hours (though in fact doing so wouldn't have been necessarily the right thing to do)
+* Manually-generated page (which is either poor because it should have paged automatically, or poor because a volunteer felt they had to manually page SREs at the weekend when actually it could have waited until NBD, so comms / docs need to be better)
+* We effectively lost more than 1 LVS
+
+==Links to relevant documentation==
+
+* [[Network monitoring#virtual-chassis crash]]
+
+==Actionables==
+
+* Decide whether switch failure should page or not
+* Cookbook for rack downtime - https://phabricator.wikimedia.org/T327300
+
+<mark>Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]]  Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|no
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

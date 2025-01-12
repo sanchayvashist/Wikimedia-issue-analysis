@@ -1,0 +1,145 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T327196
+| paged-num = Sukhbir Singh
+| responders-num = 2 volunteer sysadmins, 1 SWE, plus some SREs arriving later
+| coordinators = Taavi (de facto)
+| start = 2023-01-17 18:31:11
+| end = 2023-01-17 18:44:23
+| metrics = not sure
+| impact = For roughly 15 minutes, all wikis were unreachable for logged-in users and non-cached pages.
+}}
+
+An issue with inconsistent state of deployed code during a [[Backport windows|backport deployment]] caused MediaWiki to crash for all logged-in page views.
+
+The root cause of this issue was MediaWiki re-reading and applying changes to extension.json before a php-fpm restart would have picked up changes to the PHP code.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+*18:16 A volunteer starts to backport five patches (3 config changes, one core change and one DiscussionTools change)
+*18:31 The patches get deployed to the canaries. Some errors are returned, although the canary checks don't prevent the patch from moving forwards presumably due to the short time between the file sync and php-fpm restarts.
+*18:33 Sync to the entire cluster starts. '''OUTAGE BEGINS'''
+*18:34:51 First user report on IRC
+*18:34:55 First automated alert: <+icinga-wm> PROBLEM - MediaWiki exceptions and fatals per minute for appserver on alert1001 is CRITICAL: 2.651e+04 gt 100
+*18:35:42 Backport is cancelled by the deployer. This was during the k8s sync phase, before php-fpm restarts started. This leaves the cluster in an inconsistent state between code on disk and code running until the revert is deployed.
+*18:37:43 First paging alert: <+jinxer-wm> (FrontendUnavailable) firing: varnish-text has reduced HTTP availability #page
+*18:39 Revert sync starts
+*18:48 Revert sync is done '''OUTAGE ENDS'''
+*~19:30 A revised patch is synced successfully
+
+==Detection==
+Humans and automated alerts detected the issue quickly, and the alert volume was manageable.
+
+==Conclusions ==
+
+===What went well?===
+
+* The issue was detected early and the offending patch could be isolated early
+** Technically in this case time-to-recovery would have been faster if the backport would not have been cancelled. However, in general, the author believes that it is a good thing that the deployer noticed the issue quickly and the first instinct was to deploy a revert, since that is the fastest way to recovery in most cases of faulty patches in this process.
+* The revert worked as is
+
+===What went poorly?===
+
+* Canary checks did not catch the issue
+* Due to the scap backport workflow, deployers don't think about sync order like scap sync-file forced them to do so.
+** Developers and deployers did not expect that PHP code and other files (extension.json) would not be synced exactly at the same time.
+* php-fpm restarts take ages to complete, and the Kubernetes deploys happen in between the file sync and php-fpm restarts
+* wikimediastatus.net was not updated
+
+===Where did we get lucky?===
+
+* not sure, I think everything went as expected
+
+==Links to relevant documentation==
+
+* [[Backport windows/Deployers]]
+
+==Actionables==
+
+* TODO: can canary checks detect this issue?
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|responders were deployers, not SREs
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|pages were only sent out right before mitigating action
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|The page was not routable to sub-teams because it originated in the frontend
+(Basically the sub-team was everyone)
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|yes
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|yes
+|no incident doc was created because it was not necessary to create one
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|responders did not have access or training on wikimediastatus.net usage
+|-
+|Is there a phabricator task for the incident?
+|yes
+|created by the community
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|no
+|Serve production traffic via Kubernetes: https://phabricator.wikimedia.org/T290536
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|yes
+|[[Backport_windows/Deployers#Reverting]], although frequent deployers usually are familiar with the process and don't use the documentation
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|13
+|
+|}

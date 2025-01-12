@@ -1,0 +1,105 @@
+{{irdoc|status=review}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Summary ==
+Various Wikidata Query Service instances were down (failing readiness probe). Nodes that were down had errors in their blazegraph logs, and the problem would not spontaneously resolve without a restart of blazegraph.<!-- Reminder: No private information on this page! -->
+
+'''Impact''': There was a period of a few minutes where there was a full outage; all WDQS queries failed to complete during this window. There was a more extended period of degraded service where a subset of queries would fail depending on which instance received the request.
+
+{{TOC|align=right}}
+
+== Timeline ==
+Various Wikidata Query Service instances went down (failing readiness probe). Nodes that were down had errors in their blazegraph logs, and the problem would not spontaneously resolve without intervention.
+
+Behavior was observed to be consistent with one or more “bad queries” being repeatedly ran; each instance of a query that was too taxing would result in the associated instance going offline. This explains the fact that not all servers failed simultaneously, yet servers tended to go down rapidly one after the other. It also explains why issues were isolated to a given DC: initially, requests for the suspected “offender” would have routed to codfw, but following manual DNS depool, requests would have routed to eqiad, mirroring the timing of instances going offline.
+
+Outages were successfully combated in the short-term by restarting blazegraph on affected instances. Full resolution was reached by developers and SREs working together to identify problematic queries (particularly those that generated errors in Varnish) and tracing them to the agent submitting them, while blazegraph was restarted as needed to maintain service availability.
+
+There were a few minutes of full service outage, and a larger period of partial outage (a given query might have failed depending on which <code>(datacenter, node)</code> it was routed to)
+
+---
+
+SAL log messages start on [https://sal.toolforge.org/production?p=1&q=&d=2020-07-23 this page] and continue through to [https://sal.toolforge.org/production?p=0&q=&d=2020-07-23 here]
+
+The timings of when a given public-facing WDQS instance was rendered inoperable can be seen in [https://grafana.wikimedia.org/d/000000489/wikidata-query-service?panelId=7&fullscreen&orgId=1&from=1595524221587&to=1595531775603&var-cluster_name=wdqs this graph] of RDF triple count (no data => node unable to process requests)
+
+'''All times in UTC.'''
+
+Note: Full outage occurred approximately between '''17:50''' and '''17:59'''
+
+* 17:11 First instance of failed readiness probe occurs on single codfw instance '''wdqs2001'''
+* 17:16 Automated de-pool of '''wdqs2002''' fails due to “too many down”
+* 17:24 Critical alert leads to '''icinga-wm''' posting in '''#wikimedia-operations''' for codfw, by this point all 4 codfw wdqs nodes are unable to respond to requests
+* 17:35 Decision is made to DNS depool codfw to prevent user impact
+* 17:38 Noted that blazegraph is “stuck” on affected nodes
+* 17:48 Manual '''restart of blazegraph''' on '''wdqs2001''' after pulling stack trace
+* 17:49 Critical alert leads to '''icinga-wm''' posting in '''#wikimedia-operations''' for '''eqiad''', all 4 nodes down for wdqs-heavy-queries_8888 and wdqs-ssl_443, 3/4 servers down for wdqs_80
+* 17:50 First confirmation of user impact, simple queries fail to work entirely
+* 17:51 '''wdqs2001''' is operational following the manual restart of blazegraph
+* 17:52 codfw is DNS "repooled" to allow the (now partially healthy) datacenter to accept requests
+* 17:58 Single eqiad instance '''wdqs1003''' has blazegraph restarted to restore service for eqiad, remaining non-restarted eqiad and codfw nodes have their blazegraph restarted to restore full service
+* 17:59 '''Outage resolved''' for first wave, queries working
+[Following this point, there were a couple more waves of partial outages which were combatted with further blazegraph restarts while others worked to identify problematic queries and trace them to their origin]
+* 18:44 Suspected IP address blocked
+(No further partial outages occurred after this time)
+
+
+<!-- Reminder: No private information on this page! -->
+
+== Detection ==
+Issue was first detected when a critical alert was issued and plumbed through to IRC:
+
+<code>PROBLEM - PyBal backends health check on lvs2009 is CRITICAL: PYBAL CRITICAL - CRITICAL - wdqs-heavy-queries_8888: Servers wdqs2003.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs-ssl_443: Servers wdqs2003.codfw.wmnet, wdqs2001.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled: wdqs_80: Servers wdqs2003.codfw.wmnet, wdqs2002.codfw.wmnet are marked down but pooled</code>
+
+Initial critical alerts that fired:
+
+<code>PyBal backends health check on lvs2009</code>
+
+<code>PyBal IPVS diff check on lvs2010</code>
+
+<code>PyBal backends health check on lvs2010</code>
+
+Alert volume was manageable and fairly clearly indicated the problem (too many nodes were down in order to maintain full availability). Alert could perhaps explicitly show the connection between "nodes are marked down but not pooled" and "the aforementioned is occurring because too many nodes are down".
+
+== Conclusions ==
+It's known that WDQS presents many unique scaling challenges, and that exposing a public endpoint comes with risks.
+
+We have throttling in place. This state is maintained within each server rather than being shared; as a result, blazegraph restarts will clear any throttling behavior automatically put in place.
+
+We don't think implementing shared state is a good idea because it won't fully solve the problem and makes the system more difficult to reason about (due to persisting state across restarts).
+
+Ultimately this issue is more related to expectations of service availability / performance: while there are technical measures we can put in place to minimize "blast radius", '''there will always be potential for user behavior to topple the system''', thus communication should center around the level of availability of this service. As such one of our action items is to define clear SLOs and an error budget for Wikidata Query Service. The amount of effort required to support the required level of availability needs to be assessed.
+
+=== What went well? ===
+* Automated monitoring detected incident fairly quickly (~13 minutes after first indication of problem, and even less time if measuring from the point that all nodes were offline)
+* Many SREs and developers made themselves available to help triage and troubleshoot
+* Fairly quickly ruled out competing hypotheses without getting "rabbit-holed" (for example, the outage being related to a recent puppet run)
+* Once problem was identified, corrective action was taken quickly to restore service
+* We may have discovered a plausible explanation for [https://phabricator.wikimedia.org/T242453 T242453]
+
+=== What went poorly? ===
+* Queries are logged after execution, not before, meaning a query that locks up the entire instance (as we saw with this incident) doesn't generate logs at the blazegraph level. This was mitigated by examining logs "higher up" in the stack (varnish, nginx, etc)
+
+=== Where did we get lucky? ===
+* incident occurred when many people were immediately available to assist
+* we were able to use our existing logs, etc to identify potential "culprit"
+
+=== How many people were involved in the remediation? ===
+* Several SREs from various teams, including 2 from Search team (the service owners for Wikidata Query Service)
+* 2 search team developers
+
+== Links to relevant documentation ==
+General service documentation lives [https://wikitech.wikimedia.org/wiki/Wikidata_query_service here]
+
+[https://grafana.wikimedia.org/d/000000489/wikidata-query-service?orgId=1&from=1595524221587&to=1595531775603&var-cluster_name=wdqs Grafana dashboard for public-facing WDQS service]
+
+== Actionables ==
+
+* [https://phabricator.wikimedia.org/T258739 T258739] wdqs admins should have access to nginx logs, jstack on wdqs machines
+* [https://phabricator.wikimedia.org/T258754 T258754] Define SLOs, error budget for WDQS
+
+Note: We discussed submitting an upstream bug report for [https://phabricator.wikimedia.org/T242453 T242453], but relevant context here is that Blazegraph was acquired by Amazon. As a result, while our e-mails are still responded to, we don't expect there to be engineering resources available to help troubleshoot a concurrency/deadlock issue, as Blazegraph is no longer under active development. As such we have not submitted an upstream bug report because we don't expect the time investment of a proper bug report to be fruitful.

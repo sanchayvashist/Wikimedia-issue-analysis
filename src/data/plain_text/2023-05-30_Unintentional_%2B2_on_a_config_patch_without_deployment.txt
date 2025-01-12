@@ -1,0 +1,78 @@
+
+
+== Summary ==
+
+
+https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/923650 was accidentally +2'd without intent to deploy (like on a software repo rather than a config repo). This could have led to confusion for a future deployer.
+
+
+
+==Timeline==
+All times in UTC.
+
+*05-30 10:00 https://gerrit.wikimedia.org/r/c/operations/mediawiki-config/+/923650 is +2'd
+*05-30 10:01 patch was reverted by an observer.
+
+==Detection==
+
+==Conclusions ==
+
+OPTIONAL: General conclusions (bullet points or narrative)
+
+===What went well?===
+
+* The mistake was noticed by someone else within a minute, and subsequently reverted.
+
+OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc
+
+===What went poorly?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc
+
+===Where did we get lucky?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc
+
+==Links to relevant documentation==
+
+* …
+
+Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.
+
+==Actionables==
+
+* …
+
+Create a list of action items that will help prevent this from happening again as much as possible. Link to or create a Phabricator task for every step.
+
+Add the #Sustainability (Incident Followup) and the #SRE-OnFire  Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              		
+People                                        	Were the people who responded prepared enough to respond effectively                                              		
+People                                        	Were fewer than five people paged?                                                                                		
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     		
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.		
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        		
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   		
+Process                                       	Is there a phabricator task for the incident?                                                                     		
+Process                                       	Are the documented action items assigned?                                                                         		
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               		
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.		
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         		
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            		
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    		
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   		
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    		

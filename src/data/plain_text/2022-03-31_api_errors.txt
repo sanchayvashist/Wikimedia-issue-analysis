@@ -1,0 +1,45 @@
+
+
+==Summary==
+
+
+After a code change   rolled out in this week's train, the GlobalUsersPager class (part of CentralAuth) produced expensive DB queries that exhausted resources on s7 database replicas.
+
+Backpressure from the databases tied up PHP-FPM workers on the API servers, triggering a paging alert for worker saturation. The slow queries were identified and manually killed on the database, which resolved the incident.
+
+Because the alert fired and the queries were killed before available workers were fully exhausted, the impact was limited to s7. Full worker saturation would have resulted in a complete API outage.
+
+Because only two engineers responded to the page and the response only took half an hour, we decided not to designate an incident coordinator, start a status doc, and so on. We didn't need those tools to organize the response, and they would have taken time away from solving the problem.
+
+Documentation:
+* Phabricator task detailing the slow query
+* API server RED dashboard showing elevated latency and errors; php-fpm workers peaking around 75% saturation; and s7 database errors
+* Same dashboard for the app servers showing measurable but lesser impact
+
+==Actionables==
+
+* Revert the patches generating the slow queries - done  
+* Later (2022-04-06) it was discovered the query killer was using the old 'wikiuser' name, which prevented it from acting. Fixed in , deploying soon.
+
+==Scorecard==
+
+
+Incident Engagement™  ScoreCard
+
+           	Question                                                                                                                                                 	Score	Notes
+People     	Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)                         	0    	Info not logged
+People     	Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)                                                         	1    	
+People     	Were more than 5 people paged? (score 0 for yes, 1 for no)                                                                                               	0    	paged via batphone
+People     	Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)                                                                                	0    	paged via batphone
+People     	Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)                                  	0    	paged via batphone
+Process    	Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)                                                        	0    	
+Process    	Was the public status page updated? (score 1 for yes, 0 for no)                                                                                          	0    	
+Process    	Is there a phabricator task for the incident? (score 1 for yes, 0 for no)                                                                                	1    	
+Process    	Are the documented action items assigned?  (score 1 for yes, 0 for no)                                                                                   	1    	
+Process    	Is this a repeat of an earlier incident (score 0 for yes, 1 for no)                                                                                      	1    	
+Tooling    	Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)	1    	
+Tooling    	Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)                     	1    	
+Tooling    	Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)                                                                       	1    	
+Tooling    	Were all engineering tools required available and in service? (score 1 for yes, 0 for no)                                                                	1    	
+Tooling    	Was there a runbook for all known issues present? (score 1 for yes, 0 for no)                                                                            	1    	
+Total score	Total score                                                                                                                                              	9    	

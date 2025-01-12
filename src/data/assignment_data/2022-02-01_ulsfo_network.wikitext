@@ -1,0 +1,144 @@
+{{irdoc|status=review}}<!--The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}-->
+
+==Summary==
+{{Incident scorecard
+| task = No task
+| paged-num = 20+
+| responders-num = 6+
+| coordinators = 0
+| start = 2022-01-31 16:05
+| end = 2022-01-31 16:08
+| impact = For 3 minutes, clients served by the ulsfo POP were not able to contribute or display un-cached pages. 8000 errors per minute (HTTP 5xx).
+}}
+
+A firewall change was pushed to ulsfo routers, which caused [[ulsfo]] to lose connectivity to the other POPs and core sites for 3min.
+
+== Timeline ==
+* 16:03 - apply [[gerrit:c/operations/homer/public/+/748098/3|configuration change]] on cr3-ulsfo
+* 16:05 - apply [[gerrit:c/operations/homer/public/+/748098/3|configuration change]] on cr4-ulsfo - '''outage starts'''
+* 16:06 - Icinga notifies about connectivity issues to ulsfo - '''paging'''
+* 16:08 - change rolled back - '''outage ends'''
+
+'''Documentation''': 
+
+* https://grafana.wikimedia.org/d/000000503/varnish-http-errors?from=1643645069528&to=1643645324222
+
+'''Root cause:'''
+
+The change incorrectly restricts [[:en:Bidirectional_Forwarding_Detection|BFD]] to BGP peers:<syntaxhighlight lang="diff">
++      term allow_bfd {
++          from {
++              source-prefix-list {
++                  bgp-sessions;
++              }
++              protocol udp;
++              port 3784-3785;
++          }
++          then accept;
++      }
+</syntaxhighlight>While BFD is also used by OSPF sessions, which caused them to be tear down.
+
+One surprising point is that the issue didn't show up in the verification commands (<code>show ospf interfaces</code>, <code>show ospf neighbors</code>), all neighbors are present.<syntaxhighlight lang=text>
+show ospf interface   
+
+Interface           State   Area            DR ID           BDR ID          Nbrs
+
+ae0.2               PtToPt  0.0.0.0         0.0.0.0         0.0.0.0            1
+
+et-0/0/1.401        PtToPt  0.0.0.0         0.0.0.0         0.0.0.0            1
+
+xe-0/1/1.0          PtToPt  0.0.0.0         0.0.0.0         0.0.0.0            1
+
+show ospf neighbor    
+
+Address          Interface              State     ID               Pri  Dead
+
+198.35.26.197    ae0.2                  Full      198.35.26.193    128    35
+
+198.35.26.199    et-0/0/1.401           Full      198.35.26.194    128    33
+
+198.35.26.209    xe-0/1/1.0             Full      208.80.154.198   128    34
+</syntaxhighlight>While it was effectively down:
+
+<code>rpd[16292]: RPD_OSPF_NBRDOWN: OSPF neighbor 198.35.26.209 (realm ospf-v2 xe-0/1/1.0 area 0.0.0.0) state changed from Full to Down due to InActiveTimer (event reason: BFD session timed out and neighbor was declared dead)</code>
+
+== Conclusion ==
+* More progressive roll out (longer wait time between each routers, as well as fewer changes at a time) could have reduced the risk of the issue happening
+* Monitoring properly caught the issue
+= Scorecard =
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|0
+|
+|-
+| Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours) 
+|1
+|
+|-
+! rowspan="5" | Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no) 
+|0
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+| Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+| Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|9
+|
+|}

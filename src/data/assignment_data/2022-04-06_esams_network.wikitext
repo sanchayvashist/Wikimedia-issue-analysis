@@ -1,0 +1,97 @@
+{{irdoc|status=final}}
+
+==Summary==
+{{Incident scorecard
+| task = T305532
+| paged-num = 
+| responders-num = 
+| coordinators = Jaime C
+| start = 08:20
+| end = 08:50
+| impact = For 30 minutes, wikis were slow or unreachable for a portion of clients to the Esams data center. This is one of two DCs serving Europe, Middle-East, and Africa.
+}}
+
+This was due to [https://www.ams-ix.net/ams/news/outage-at-the-ams-ix-platform-in-amsterdam an issue] at the [[w:Amsterdam Internet Exchange|Amsterdam Internet Exchange]] (AMS-IX).
+
+'''Documentation''':
+
+* https://www.wikimediastatus.net/incidents/jnqvz8gljzhy
+
+*[https://docs.google.com/document/d/1FfWF7LVyDpWvtIcv3G-Z4xaPZvOR3Rn05NZegywfVaY/edit#heading=h.vg6rb6x2eccy Restricted document]
+
+==Scorecard==
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|0
+|Paged via batphone
+|-
+|Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|0
+|Paged via batphone
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|0
+|Paged via batphone
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|1
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|1
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|1
+|
+|-
+|Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" |Total score
+|10
+|
+|}

@@ -1,0 +1,61 @@
+{{irdoc-draft|status=review}}
+
+== Summary ==
+[[File:Cp3065-no-threads.png|thumb|Varnish on cp3065 running out of work threads]]
+[[File:Cp3053-ats-be-connections.png|thumb|Thousands of connections established on ats-be@cp3053]]
+On 2021-09-12 starting at 18:13 UTC, the cache upload cluster at esams (upload-lb.esams.wikimedia.org) was affected by an outage that was the result of a large image being hotlinked by what appears to be multiple Romanian news organization judging from HTTP referer values. The sudden surge in traffic was sent to a single ATS backend instance, [https://grafana.wikimedia.org/d/6uhkG6OZk/ats-instance-drilldown?viewPanel=66&orgId=1&from=1631468644595&to=1631474529640&var-site=esams%20prometheus%2Fops&var-instance=cp3053&var-layer=backend saturating the 10G NIC of the host between 18:06 and 18:08] and later triggering an anomalous behavior on 5 Varnish frontend instances in esams out of 8. The behavior consisted in the establishment of [https://grafana.wikimedia.org/d/wiU3SdEWk/cache-host-drilldown?viewPanel=100&orgId=1&from=1631468644595&to=1631474529640&var-site=esams%20prometheus%2Fops&var-instance=cp3055 thousands of connections] from all affected Varnish instances to a single cache backend. 
+
+At the same time, all instances showing this behavior [https://grafana.wikimedia.org/d/wiU3SdEWk/cache-host-drilldown?viewPanel=99&orgId=1&from=1631467575412&to=1631474057976&var-site=esams%20prometheus%2Fops&var-instance=cp3055 quickly reached the maximum configured number of work threads] (24K given the configuration settings: thread_pools=2, thread_pool_max=12000). Without available work threads, the instances could not serve responses anymore. The error condition was resolved by a rolling restart of all Varnish instances in the upload cluster at esams. The incident was closed at 18:43 UTC. 
+
+Between 18:13 and 18:37, a high number of web requests against the upload cache cluster at Esams [https://grafana.wikimedia.org/d/000000479/frontend-traffic?viewPanel=12&orgId=1&from=1631467575412&to=1631474057976&var-site=esams&var-cache_type=upload&var-status_type=5 resulted in server errors], up to about 15K req/s at peak. The amount of requests received from Romanian IPs against the upload cache cluster in Esams doubled, and the amount of data sent as response to requests from Romanian IPs increased about 50 times. 
+
+=== Impact ===
+For 20 minutes, images and other media files were unavailable for many clients in countries routed to Esams (e.g. Europe), with up to 15,000 failed requests at peak. This affected all wikis, with gaps in articles where an image should be.
+
+=== Detection ===
+The SRE team was notified about the issue by a "ATS TLS has reduced HTTP availability" page, as well as IRC and email notifications.
+
+== Timeline ==
+'''All times UTC'''
+* 18:13: Notification of the problem by alerts: "alert1001/ATS TLS has reduced HTTP availability #page is CRITICAL" and "Possible DDoS to upload-lb.esams.wikimedia.org 91.198.174.208". Discussion on #mediawiki_security channel started.
+* 18:13 <+icinga-wm> PROBLEM - ATS TLS has reduced HTTP availability #page on alert1001 is CRITICAL: cluster=cache_upload layer=tls https://wikitech.wikimedia.org/wiki/Cache_TLS_termination https://grafana.wikimedia.org/dashboard/db/frontend-traffic?panelId=13&fullscreen&refresh=1m&orgId=1
+* 18:13 <+icinga-wm> PROBLEM - Varnish HTTP upload-frontend - port 3127 on cp3061 is CRITICAL: HTTP CRITICAL - No data received from host https://wikitech.wikimedia.org/wiki/Varnish
+* 18:13 <+icinga-wm> PROBLEM - Varnish HTTP upload-frontend - port 3123 on cp3057 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Varnish
+* 18:13 <+icinga-wm> PROBLEM - Varnish HTTP upload-frontend - port 3120 on cp3057 is CRITICAL: CRITICAL - Socket timeout after 10 seconds https://wikitech.wikimedia.org/wiki/Varnish
+* 18:18: First report that this was possibly due to Android user-agents fetching a single image.
+* 18:22: vgutierrez records "cp3057 ats-tls is unable to connect with varnish-frontend".
+* 18:24: Hotlinked image identified, including the Android app from the referer.
+* 18:25: vgutierrez suggests he is going to restart varnish-fe on cp3057 to try to see if this resolves the problem.
+* 18:26 < vgutierrez> !log restart varnish on cp3057
+* 18:27 <+icinga-wm> RECOVERY - Varnish HTTP upload-frontend - port 3127 on cp3057 is OK: HTTP OK: HTTP/1.1 200 OK - 472 bytes in 0.162 second response time https://wikitech.wikimedia.org/wiki/Varnish
+* 18:27 <+icinga-wm> RECOVERY - Varnish HTTP upload-frontend - port 3125 on cp3057 is OK: HTTP OK: HTTP/1.1 200 OK - 472 bytes in 0.165 second response time https://wikitech.wikimedia.org/wiki/Varnish
+* 18:31: vgutierrez reports that restarting worked and he will do a rolling restart of varnish-fe on upload@esams.
+* 18:33 < vgutierrez> !log restart varnish-fe on cp3061, cp3063 and cp3065
+* 18:33: Recovery observed; 502 start dropping.
+* 18:43: Incident resolved, error rates down, traffic back to normal values.
+
+== Conclusions ==
+=== What went well? ===
+* Incident detection
+* The image got cached at the ATS backend layer, protecting both the Swift origin servers and the esams-codfw network link from excessive traffic
+* Some Varnish frontends eventually cached the image thanks to the [https://phabricator.wikimedia.org/T275809#6984682 exp caching policy]
+* Three nodes were not affected (cp3051, cp3053, cp3059)
+* There were many (12) SREs around when the incident happened
+
+=== What went poorly? ===
+* 3rd occurrence of this outage in one year (previous ones on [https://docs.google.com/document/d/1n4-a9RWohbfT7yu0Ti5-ObvsC4IlCKrcYZr2qw-Jrkw/edit#heading=h.vg6rb6x2eccy February 3rd] and [https://docs.google.com/document/d/1LmlSoUceAsv6n6oEWH-ejzBLSoV5mLMLLYj_tmY1-gk/edit#heading=h.vg6rb6x2eccy 6th] in upload@eqsin)
+* C-hashing popular, large media to one single backend  
+* The error condition causing Varnish frontend to run out of threads is a [https://phabricator.wikimedia.org/T274033 known unknown]
+* Five nodes were affected (cp3055, cp3057, cp3061, cp3063, cp3065)
+
+=== How many people were involved in the remediation? ===
+12 engineers. 
+
+== Actionables ==
+* {{Status|TODO}} Prioritize work on single backend CDN nodes https://phabricator.wikimedia.org/T288106
+* {{Status|TODO}} Investigate issue causing Varnish to establish thousand of connections to its origins / max out work threads / mmap counts (possibly different issues)
+* {{Status|TODO}} Revisit maximum number of varnish-fe connections to origins (currently 50K) 
+
+{{#ifeq:{{SUBPAGENAME}}|Report Template||
+[[Category:Incident documentation]]
+}}

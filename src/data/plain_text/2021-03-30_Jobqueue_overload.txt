@@ -1,0 +1,15 @@
+ 
+
+== Summary ==
+An upload of 65 video 4k files via the server-side upload process caused high CPU/socket timeout errors on jobrunners (all jobrunner hosts are also videoscalers).  This caused an increase in job backlog and unavailability on several mw-related servers (job queue runners, etc.).  It seems that a combination of the files being 4k (and thus requiring many different downscales), long (averaging an hour in length), combined with the fact that the videos were uploads from a local server (mwmaint) with a fast connection to the rest of our infrastructure resulted in too much load being placed on the jobqueue infrastructure.
+
+Halting the uploads and temporarily splitting the jobqueue into videoscalers and other jobrunners allowed the infrastructure to catch up.  
+
+== Actionables ==
+
+* Document that users should use --sleep to pause between files when running importImages.php (done)
+*  Rate limit the process to upload large files 
+*  Add rate limiting to the jobqueue videoscalers 
+*  Add alerting for Memcached timeout errors 
+*  Update Runboook wikis for the application and LVS servers 
+* Have some dedicated jobrunners that aren't active videoscalers

@@ -1,0 +1,33 @@
+{{irdoc|status=review}}
+
+== Summary ==
+Today at 11:41 the icinga check for `ms-fe.svc.codfw.wmnet` timed out and thus paged (and recovered three minutes later):
+
+<pre>
+11:41 -icinga-wm:#wikimedia-operations- PROBLEM - LVS swift-https codfw port 443/tcp - Swift/Ceph media 
+          storage IPv4 #page on ms-fe.svc.codfw.wmnet is CRITICAL: CRITICAL - Socket timeout after 10 
+          seconds https://wikitech.wikimedia.org/wiki/LVS%23Diagnosing_problems
+...
+11:44 -icinga-wm:#wikimedia-operations- RECOVERY - LVS swift-https codfw port 443/tcp - Swift/Ceph media 
+          storage IPv4 #page on ms-fe.svc.codfw.wmnet is OK: HTTP OK: HTTP/1.1 200 OK - 396 bytes in 
+          0.140 second response time https://wikitech.wikimedia.org/wiki/LVS%23Diagnosing_problems
+</pre>
+
+Users in codfw/ulsfo/eqsin have experienced ~15min of higher latency (possibly timeouts) for hit-local and miss requests (10-25% of the site's requests, depending on the site).
+
+[[File:Swift-codfw-11feb2021-high-latency.png.png|thumb|Screenshot from https://grafana.wikimedia.org/d/8T2XA-5Gz/frontend-ats-tls-ttfb-latency]]
+
+Specifically hitting <tt>/monitoring/backend</tt> timed out, this in turn meant that some of the backend server(s) where the <tt>monitoring</tt> container lives were slow/unhealthy.
+Case in point <tt>ms-be2033.codfw.wmnet</tt> was reported as slow from <tt>/var/log/swift/server.log</tt> on e.g. <tt>ms-fe2006.codfw.wmnet</tt>:
+
+<pre>
+Feb  1 11:44:29 ms-fe2006 proxy-server: ERROR with Object server 10.192.16.15:6000/sdk1 re: Trying to GET /v1/AUTH_mw/monitoring/backend: Timeout (10.0s) (txn: txe96767fb630b4828af04a-006017e993) (client_ip: 208.80.154.88)
+</pre>
+
+The slowness was induced by an earlier swift rebalance ({{Bug|T272837}}) and the way we do rebalances at the moment means that such operations are generally noisy/impactful to the cluster (e.g. {{Bug|T221904}}, {{Bug|T271415}}). Swift has been depooled internally from its discovery record (essentially anticipating {{Bug|T267338}}).
+
+
+== Actionables ==
+
+* Change <code>/monitoring/backend</code> to <code>/monitoring/frontend</code> (i.e. check the frontend itself) for icinga service check and pybal's proxyfetch {{Bug|T273453}}
+* Consider depooling swift's discovery records during rebalances {{Bug|T273453}}

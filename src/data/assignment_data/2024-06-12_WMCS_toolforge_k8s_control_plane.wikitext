@@ -1,0 +1,143 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T367348
+| paged-num = N/A
+| responders-num = 5 people: Taavi, David, Francesco, Andrew, Arturo
+| coordinators = Andrew Bogott
+| start = 2024-06-12 16:35
+| end = 2024-06-12 17:13
+| metrics = No relevant SLOs exist.
+| impact = All Toolforge users were impacted. While running webservices/jobs were somewhat alive and reachable, no jobs or webservices could be created, or operated in any way.
+}}
+
+* System-wide renaming of Kyverno policies overloaded Toolforge Kubernetes control nodes rendering API unresponsive
+* Lack of working Kubernetes API prevented rollback
+{{TOC|align=right}}
+
+==Timeline==
+14:00 (approximately) resource limits for kyverno are lifted in response to frequent kyverno pod death https://gitlab.wikimedia.org/repos/cloud/toolforge/toolforge-deploy/-/commit/682256e974c5f17f01c1838bb057de9eefeeb492
+
+16:35 Arturo applies https://gitlab.wikimedia.org/repos/cloud/toolforge/maintain-kubeusers/-/merge_requests/42 which results in an epic (and slow) renaming of many resources. This combined with lifted resource limits on Kyverno allows '''Kyverno to overload the k8s api server'''
+
+16:40 Incident opened. Andrew  becomes IC.
+
+16:44 Arturo gets shell access on tool control nodes, removes kyverno policies
+
+16:46 Some recovery (test services load) but API remains unresponsive due to CPU overload
+
+16:50 Taavi resizes k8s control nodes from 4 CPUs to 8 CPUs (tools-k8s-control-[7,8,9])
+
+17:00 Lots of kubelet errors saying ‘node not found,’ services failing to register, all services fail on the registry admission webhook
+
+17:04 taavi fixes the registry webhook (maybe?)
+
+17:09 taavi forces everything onto tools-k8s-control-7 which was working, that results in all nodes recovering
+
+17:13 '''incident resolved'''
+
+17:25: maintain-kubeusers re-enabled (but kyverno left turned off for now)
+
+==Detection==
+This issue was detected by Arturo -- during ongoing deployment work he noticed that the k8s API had become unresponsive.
+
+Some alerts followed but only after the incident was open and fixes in progress.
+
+==Conclusions ==
+
+===What went well?===
+
+* Quick response, good teamwork, relatively quick diagnosis of the issue
+
+===What went poorly?===
+
+* An incorrect + undeployed incorrect registry controller config interfered with immediate fixing. It probably should have been deployed immediately after roll-out rather than waiting in place for later discovery.
+
+==Actionables==
+
+* Fix HA proxy load-balancer health check monitor to not poll nodes where the API is not responding ([[phab:T367349]])
+* Fix incorrect registry controller config  https://gitlab.wikimedia.org/repos/cloud/toolforge/registry-admission/-/merge_requests/5
+* Do some more load testing with kyverno before deploying
+* scale up coredns replicas ([[phab:T333934]])
+* Verify that kyverno policies match our namespace ([[phab:T367350]])
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|9
+|
+|}

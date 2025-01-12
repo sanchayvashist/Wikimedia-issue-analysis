@@ -1,0 +1,214 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T337446
+| paged-num = 0
+| responders-num = 3
+| coordinators = none
+| start = 2023-05-25
+| end = 2023-06-01
+| metrics = WMCS services (bots and tools) were affected, mostly used by the community. No production services affected.
+| impact = [https://wikitech.wikimedia.org/wiki/Help:Toolforge/Database Wikireplicas] had outdated data and were unavailable for around one week. There were periods where not even old data was available. Tools most likely experienced intermittent unavailability or outdated data from 2023-05-25 to 2023-06-01. Replication of multiple sections (s1, s2, s5, s7) broke most probably due to a bug in mariadb version 10.4.29. A version downgrade to 10.4.26 was made and all hosts where recloned.
+}}
+
+===== Example tools which rely on the wikireplicas: =====
+
+* [https://xtools.wmcloud.org/ec Edit Counter]
+* [https://copypatrol.toolforge.org/en Copy Patrol] <br /><!-- Reminder: No private information on this page! -->
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+'''Outage begins'''
+
+*2023-05-25 05:11: Icinga alert fires: ''<icinga-wm> PROBLEM - MariaDB Replica SQL: s1 on db1154 is CRITICAL,'' replication lag on db1154, db1155 and clouddb start to increase
+*2023-05-25 05:11: Replication breaks on two different sanitarium hosts (db1154 and db1155): ''<icinga-wm> PROBLEM - MariaDB Replica SQL: s1 on db1154 is CRITICAL: CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table enwiki.user_properties: Cant find record in user_properties, Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the events master log db1196-bin.001099, end_log_pos 654625806''
+*2023-05-25 05:18:  Manuel starts checking and communicates so on IRC
+*2023-05-25 05:35: Incident opened by alert of broken replication.  Amir opens a task on Phabricator [[phab:T337446|T337446]] and the relevant teams and individuals tagged. Ways to mitigate this were explored, such as adding some transaction to get the replication flowing back but discarded as it would compromise data integrity.
+*2023-05-25 05:47: Manuel tries to fix a row in s5, host crashes
+*2023-05-25 05:51: Manuel: The first attempts to manually fix the rows result in the [[phab:T337446#8878826|hosts crashing]] 
+*2023-05-25 06:13: Fix row of S1 fails, host crashes
+*2023-05-25 06:27: The decision to rebuild everything is made and work starts on sanitarium hosts
+*2023-05-25 14:40: The initial for broken sections are done in sanitarium and start the sanitizing process.
+*2023-05-26 05:10 Sanitarium host is still being worked on for s1,s2, s5 and s7
+*2023-05-26 13:23 Manuel pings btullis on IRC and phabricator asking for data engineering to [[phab:T337446#8882660|prioritize the outage]]
+*2023-05-26 15:08 Cookbook cookbooks.sre.wikireplicas.update-views run by nskaggs: Started updating wikireplica views
+*2023-05-26 16:50 Manuel calls for help on IRC from WMCS and other people who have owned or own the replicas to run cookbooks responsible for updating views. There’s some response but nothing gets done by the end of day.
+*2023-05-26 replication on s3 section also breaks
+'''Replication breaks again'''
+*2023-05-27 05:12 replication on s1 section breaks again
+*2023-05-27 05:16 replication on s5 section breaks again
+*2023-05-27 05:33 replication on s7 section breaks again
+*2023-05-27 19:44 Manuel realizes that the fixed sections got broken again ([[phab:T337446#8885162|at pretty much the same time]]) 
+*2023-05-28 06:10 upgrade mysql version from 10.4.26 to 10.4.28 [[phab:T337446#8885816|T337446#8885816]] Stopping sections.
+*2023-05-28 06:12 SAL <marostegui>  Change innodb_fast_shutdown to 0 on db1154 before downgrading
+*2023-05-29 05:08 <marostegui> I have had to kill them, it's been more than 24h waiting to stop. Going to downgrade + rebuild
+*2023-05-29 05:32 recloning db1154:3311 db1154:3313 db1154:3315 db1155:3312 clouddb1021:3317
+*2023-05-29 07:58 clouddb1021 (s7) has been recloned
+*2023-05-29 08:08 Started to reclone 1014 and 1018
+*2023-05-27 / 2023-05-28: More investigation about why the second breakage happened starts on phabricator and the decision to reclone everything again + downgrade is made (from 10.4.29 to 10.4.26)
+'''Email sent to wikitech concerning outage'''
+*2023-05-29 13:59 [[listarchive:list/wikitech-l@lists.wikimedia.org/thread/RPBN7F3LZJDPFFN6U2A2QWWIL57HCIS3/#WR36DST3Z6NV4YDZ4ODVPKHEK7VEGM4B|Email sent to wikitech-l about outage.]] 
+*2023-05-29 14:21 s7 is fully recloned
+*2023-05-29 14:35 clouddb1021:s2 is fully ready with views, grants, users etc
+*2023-05-29 15:46 clouddb1021:s3 is fully ready with views, grants, users etc
+*2023-05-29 16:52 And issue with dbproxy1018 and dbproxy1019 (WMCS wikireplicas proxies) and Healthcheck for unable wikireplicas overwhelm pybal, almost causing a general outage, is detected by Valentin but there is no more context on why this is happening. several extra steps have been missing on rebuilding cloud dbs documentations. Fixing that.
+*2023-05-29 19:10 WMCS pinged again to help restore some missing tables, indexes and data because the Data Persistence team did not have enough context to proceed confidently.
+*2023-05-29 21:59 A response is sent on another thread on the same subject to reassure users that work was ongoing to restore the replicas. Users complained about the lack of access to meta_p and heartbeat_p databases.
+*2023-05-28 22:45: Replication lag in dewiki is mentioned on [[listarchive:list/wikitech-l@lists.wikimedia.org/thread/RPBN7F3LZJDPFFN6U2A2QWWIL57HCIS3/|wikitech-l]]
+*2023-05-30 04:38 Manuel detects s4 has broken too and [[phab:T337446#8887483|manually fixes it]] inserting the missing row but will reclone later 
+*2023-05-30 05:19 db1154 s4 fixed by inserting the missing row
+*2023-05-30 06:33 s5 is fully recloned
+*2023-05-30 09:21 Arturo fixes indexes/permissions (maintain-meta_p --all-databases --bootstrap) [[phab:T337446#8887809|T337446#8887809]]
+*2023-05-30 09:58 clouddb1014:3312 is now catching up
+*2023-05-30 09:59 https://phabricator.wikimedia.org/T337721 is created to investigate the proxy issue affecting pybal
+*2023-05-30 10:43 clouddb1021:3311 (s1) is fully ready with grants, views etc. Once it has caught up I will clone the other two s1 hosts.
+*2023-05-30 12:56  IdleConnection monitor is disabled is disabled via <nowiki>https://gerrit.wikimedia.org/r/c/operations/puppet/+/924342</nowiki>
+
+*2023-05-30 14:34 Users complained that while the clouddbs are accessible and updated, they are extremely slow to query.  [[phab:T337734|T337734]] was filed and WMCS was pinged for help. It turned out that the script that’s adding indexes is broken, WMCS couldn’t figure out why. Amir started investigating, fixed and started running the script.
+*2023-05-30 15:17 s2 is fully recloned
+*2023-05-30 18:44 s3 is fully recloned and it is now catching up (it is 8h behind)
+*2023-05-31 06:58 Manuel starts recloning s4
+*2023-05-31 08:10 s4 has been fully recloned, clouddb1019:3314 is now catching up with its master
+*2023-05-31 17:51:31 WMCS (Nicholas) checks in and Manuel flags some items that needed attention: still pending help with https://phabricator.wikimedia.org/T337734 and communication with users.
+'''Databases are restored, but accessing data is very slow for tools'''
+*2023-06-01 08:47 replication caught up on all sections [[phab:T337446#8894523|T337446#8894523]] Manuel reduces priority on task because all the broken sections had been successfully recloned.
+*2023-06-01 Amir finishes creating indexes using the fixed script.
+'''Outage ends'''<!-- Reminder: No private information on this page! -->
+
+==Detection==
+Replication lag was detected first by Icinga alerts. [[phab:T337446|Phabricator task]] was created and triaged.<syntaxhighlight lang="text">
+2023-05-25 05:11:16 <icinga-wm> PROBLEM - MariaDB Replica SQL: s1 on db1154 is CRITICAL: CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table enwiki.user_properties: Cant find record in user_properties, Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the events master log db1196-bin.001099, end_log_pos 654625806 https://wikitech.wikimedia.org/wiki/MariaDB/troubleshooting%23Depooling_a_replica
+2023-05-25 05:11:44 <icinga-wm> PROBLEM - MariaDB Replica SQL: s2 on db1155 is CRITICAL: CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table plwiki.user_properties: Cant find record in user_properties, Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the events master log db1156-bin.003729, end_log_pos 633898246 https://wikitech.wikimedia.org/wiki/MariaDB/troubleshooting%23Depooling_a_replica
+
+</syntaxhighlight>
+
+Broken replication on sanitarium host:<syntaxhighlight lang="text">
+Broken replication on sanitarium host
+PROBLEM - MariaDB Replica SQL: s5 on db1154 is CRITICAL: CRITICAL slave_sql_state Slave_SQL_Running: No, Errno: 1032, Errmsg: Could not execute Delete_rows_v1 event on table dewiki.flaggedpage_pending: Cant find record in flaggedpage_pending, Error_code: 1032: handler error HA_ERR_KEY_NOT_FOUND: the events master log db1161-bin.001646, end_log_pos 385492288
+
+</syntaxhighlight>MariaDB crashing when inserting the missing row example log:
+
+==Conclusions ==
+
+* mariadb version 10.4.29 maybe a replication bug - hard/impossible to reproduce
+* wikireplicas is quite critical for the community although it's not considered a "production" service
+
+===What went well?===
+
+* Database operations, such as version downgrades or reclones are well known exercises and went well.
+
+===What went poorly?===
+
+* Database replication broke multiple times on different sections, needing manual troubleshooting and intervention
+* Documentation of wikireplicas setup had missing pieces (like grants?) and is scattered across multiple places
+* Troubleshooting the issue was difficult
+* Databases (db1154) did not shut down properly
+* Recloning a database takes a lot of time
+
+===Where did we get lucky?===
+
+* Not all database sections broke
+** We could copy/check grants from those non-broken sections
+* Amir was able to quickly fix the bit rotten indexing script
+
+==Links to relevant documentation==
+
+[[File:2023-05-28 wikreplicas-s1-lag.png|thumb|440x440px|[https://grafana.wikimedia.org/d/000000303/mysql-replication-lag?orgId=1&from=1684898259498&to=1685755733819&viewPanel=1 S1 replication lag]|center]]
+
+* [https://grafana.wikimedia.org/d/000000303/mysql-replication-lag?orgId=1&from=1684898259498&to=1685755733819&viewPanel=1 S1 replication lag]
+* [https://replag.toolforge.org/ https://replag.toolforge.org, used to wiki replica lab] 
+* [[Wiki Replicas|Wikitech Wiki Replicas documentation]]
+* [[Help:Toolforge/Database#Metadata database|meta_p information]]
+* [[Portal:Data Services/Admin/Wiki Replicas#Step 5: setting indexes]]
+* [[Portal:Data Services/Admin/Wiki Replicas#Step 7: setting up metadata]]
+
+==Actionables==
+
+* Add more documentation of wikireplicas setup
+* Alerting for wikireplicas lag
+* Discuss SLO for wikireplicas and level of "production", per Leon Ziemba
+** "I wanted to ask something I've genuinely been curious about for years -- since the wiki replicas are relied upon so heavily by the editing communities (and to some degree, readers), should we as an org treat their health with more scrutiny? This of course is insignificant compared to the production replicas going down, but nonetheless the effects were surely felt all across the movement (editathons don't have live tracking, stewards can't query for global contribs, important bots stop working, etc.). I.e. I wonder if there's any appetite to file an [[Incident status|incident report]], especially if we feel there are lessons to be learned to prevent similar future outages? I noticed other comparatively low-impact incidents have been documented, such as PAWS outages." [https://phabricator.wikimedia.org/T337446#8898661]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|At least not for database problems
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|Only for the database related parts
+|-
+|Were fewer than five people paged?
+|yes
+|no page
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|no page
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|no page
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|no incident document
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|[[phab:T337446|T337446]]
+|-
+|Are the documented action items assigned?
+|no
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|no
+|Documentation lacking. Index rebuild script was bit rotten.
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

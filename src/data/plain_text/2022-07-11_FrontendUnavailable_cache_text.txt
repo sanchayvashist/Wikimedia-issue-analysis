@@ -1,0 +1,39 @@
+
+
+==Summary==
+
+
+
+There was an increase in requests to the API cluster that resulted in reduction of availabe PHP workers and a database host (db1132) running out of available connections. This database host runs MariaDB 10.6 which is known to be sensitive to high load. This resulted in an increase in latency and errors returned to clients. The spike auto-recovered and it's not clear what the exact root cause was. 
+
+Documentation:
+*Appservers RED dashboard
+
+==Actionables==
+
+*https://phabricator.wikimedia.org/T311106 - investigate mariadb 10.6 performance regression during spikes/high loads.
+
+==Scorecard==
+
+
+Incident Engagement ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	no 	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	yes	
+Process                                       	Was the incident status section actively updated during the incident?                                             	no 	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	no 	
+Process                                       	Are the documented action items assigned?                                                                         	yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	no 	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	7  	

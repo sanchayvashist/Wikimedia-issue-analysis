@@ -1,0 +1,41 @@
+{{irdoc|status=final}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+==Summary==
+Around 17:00 UTC, a faulty network switch caused partial failure of one rack in the [[Codfw cluster]]. As 8 individual hosts become unreachable, this led to reduced redundancy or capacity for some of the affected services. The hosts were moved to new switch ports, and were unreachabe for about 1 hour.
+
+* Elastic search: Three elastic nodes down, mild impact to redundancy (yellow state).
+* Swift media storage: Three ms-be nodes down in the standby cluster, no user impact (should catch up once reachable).
+* Edge cache: One cp node unreachable for the Codfw PoP, automatically depooled by healthcheck.
+* DNS: One dns node unreachable, effectively depooled automatically per lack of BGP advertising.
+
+== Notes ==
+https://wm-bot.wmflabs.org/logs/%23wikimedia-operations/20210406.txt
+ [17:01:22] <icinga-wm>	 PROBLEM - Host cp2036 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:01:26] <icinga-wm>	 PROBLEM - Host elastic2045 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:01:28] <icinga-wm>	 PROBLEM - Host ms-be2034 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:01:28] <icinga-wm>	 PROBLEM - Host ms-be2035 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:01:56] <icinga-wm>	 PROBLEM - Host elastic2046 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:02:44] <icinga-wm>	 PROBLEM - Host elastic2047 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:03:14] <icinga-wm>	 PROBLEM - Host dns2001 is DOWN: PING CRITICAL - Packet loss = 100%
+ [17:03:48] <icinga-wm>	 PROBLEM - Host ms-be2055 is DOWN: PING CRITICAL - Packet loss = 100%
+
+ [17:13:19] <elukey>	 seems a rack down
+ [17:13:46] <elukey>	 yep C2 
+ …
+ [17:38:21] <elukey>	 papaul: so I can connect to cp2035, that is in the same rack
+
+ [17:53:24] <bblack>	 (cp2036 was pulled from service by external healthchecks, and dns2001 was pulled from traffic flow when it became unable to advertise BGP to routers)
+
+ [18:14:51] <bblack>	 !log dns2001 - re-enabling and running puppet agent to restore service
+ [18:18:15] <logmsgbot>	 !log bblack@cumin1001 conftool action : set/pooled=yes; selector: name=cp2036.codfw.wmnet
+
+* [https://grafana.wikimedia.org/d/000000377/host-overview?orgId=1&from=1617710400000&to=1617746400000&var-server=cp2036&var-datasource=thanos&var-cluster=cache_upload Grafana: Host overview: cp2036]
+* [https://grafana-rw.wikimedia.org/d/000000479/frontend-traffic?orgId=1&from=1617724800000&to=1617733800000 Grafana: Frontend traffic (16:00 - 18:30)]
+
+==Actionables==
+Tracking task for the incident: https://phabricator.wikimedia.org/T279457

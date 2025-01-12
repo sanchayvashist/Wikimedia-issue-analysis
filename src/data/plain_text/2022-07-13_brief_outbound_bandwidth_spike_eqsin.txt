@@ -1,0 +1,14 @@
+
+
+==Summary==
+
+
+Brief outbound bandwidth spike for upload in Eqsin dc. Recovered by itself.
+
+* Restricted details.
+* Grafana
+
+==Actionables==
+
+* T310997 Improve webrequest log
+* https://gerrit.wikimedia.org/r/c/operations/puppet/+/768723

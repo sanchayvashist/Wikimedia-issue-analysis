@@ -1,0 +1,155 @@
+{{irdoc|status=draft}}
+
+== Summary ==
+{{Incident scorecard
+| task = T336134
+| paged-num = 0
+| responders-num = 3
+| coordinators = None
+| start = 2023-05-04T10:00
+| end = 2023-05-10T10:30
+| metrics = WDQS update lag
+| impact = End users accessing WDQS from the CODFW region received stale results.
+}}
+
+…
+
+<!-- Reminder: No private information on this page! -->The rdf-streaming-updater application in CODFW became unstable and stopped sending updates, resulting in stale data for users connecting through CODFW.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+* <code>2023-05-04T10:00</code>: the streaming updater flink job stopped to function in codfw for both WDQS and WCQS
+** user impact starts: stale results are seen when using WDQS from a region that hits CODFW
+** reason is likely <nowiki>https://issues.apache.org/jira/browse/FLINK-22597</nowiki>
+* <code>2023-05-05T16:22</code>: the problem is reported by Bovlb via <nowiki>https://www.wikidata.org/wiki/Wikidata:Report_a_technical_problem/WDQS_and_Search</nowiki>
+* <code>2023-05-05T19:00</code>: the flink jobmanager container is manually restarted and the jobs resume but the WDQS one is very unstable (k8s is heavily throttling cpu usage and taskmanager mem usage grows quickly)
+** (assumptions) because the job was backfilling 1day of data it required more resources than usual, though this is not the first time that a backfill happens (e.g. k8s cluster upgrades went well)
+** (assumptions) because the job was resource constrained rocksdb resource compaction did not happen in a timely manner
+* <code>2023-05-05T21:00</code>: the job fails again
+* <code>2023-05-06T10:00</code>: the job resumes (unknown reasons)
+* <code>2023-05-06T19:00</code>: the job fails again
+** Seeing jvm OutOfMemoryError
+** The checkpoint it tries to recover from is abnormally large (6G instead of 1.5G usually), assumption is that rocksdb compaction did not occur properly
+* <code>2023-05-07T17:27</code>: this ticket is created as UBN
+* <code>2023-05-08T16:00</code>: wdqs in CODFW is depooled
+** user impact ends
+* <code>2023-05-09T14:00</code>: increasing taskmanager memory from 1.9G to 2.5G did not help
+* <code>2023-05-09T14:00</code>: starting the job from yarn using across 12 containers with 5G did help
+** the job recovered and started to produce reasonable checkpoint sizes
+* <code>2023-05-10T00:00</code>: lag is back to normal on all wdqs servers
+* <code>2023-05-10T10:30</code>: the job is resumed from k8s@codfw
+
+==Detection==
+Prometheus alerts for the WCQS cluster fired starting at <code>2023-05-04T1030</code> . Alerts were dispatched via email, with subject <code>RdfStreamingUpdaterFlinkJobUnstable .</code>
+
+WDQS cluster alerts started a bit later, at <code>2023-05-05T1908.</code>
+
+In addition to the above subject,  WDQS alerts also included the subject  <code>RdfStreamingUpdaterHighConsumerUpdateLag.</code>
+
+The alerts correctly identified the problem and [[labsconsole:Wikidata_Query_Service/Streaming_Updater|linked to the appropriate documentation]].
+
+==Conclusions ==
+
+===What went well?===
+
+* The community recognized and alerted us to the issue.
+
+===What went poorly?===
+
+* The alert was not treated with the appropriate urgency.
+* Remediation steps (temporarily shifting the streaming updater from Kubernetes to Yarn, which has higher resource availability) were taken by a single person and may not be repeatable/documented.
+
+===Where did we get lucky?===
+
+User impact was limited, as the issue was confined to CODFW. The issue itself only resulted in stale results, as opposed to a complete lack of service.
+
+==Links to relevant documentation==
+[[Wikidata Query Service/Streaming Updater]]
+
+==Actionables==
+
+* [[phab:T336577|Update WDQS Runbook following update lag incident]]
+* [[phab:T336574|Review alerting around Wikidata Query Service update pipeline]]
+* [[phab:T337801|WDQS: Document procedure for switching between Kubernetes and Yarn Streaming Updater]]
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|no
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|T336134
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|no
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|8
+|
+|}

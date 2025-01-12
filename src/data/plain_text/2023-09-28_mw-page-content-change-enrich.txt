@@ -1,0 +1,127 @@
+
+
+== Summary ==
+
+
+…
+
+As part of T336044, @brouberol began copying Kafka partitions to new brokers.  Somehow, even with a throttle of 50MB/sec, this caused the mw-page-content-change Flink streaming enrichment job to fail producing messages to Kafka. 
+
+The responders decided to shut down the streaming application until the partitions finished copying to the new brokers.  On Monday Oct 2 The streaming application was restarted. Messages were produced, but , @tchin, @joal and @ottomata noticed the backlog of messages was not decreasing.  They increased the parallelism to 4 replicas, and finally the backlog began to be processed.
+
+
+
+==Timeline==
+Write a step by step outline of what happened to cause the incident, and how it was remedied.  Include the lead-up to the incident, and any epilogue.
+
+Consider including a graphs of the error rate or other surrogate.
+
+Link to a specific offset in SAL using the SAL tool at https://sal.toolforge.org/ (example)
+
+All times in UTC.
+
+*2023-09-28 14:33:00 MediawikiPageContentChangeEnrichJobManagerNotRunning Alert Fires
+*2023-09-28 15:08:00 @tchin restarts the job
+*2023-09-28 15:51:00 Notices job restarting about ever 5 minutes, eventually dies with Failed to send data to Kafka
+*2023-09-28 15:55:00 Message sent to #event-platform Slack channel, troubleshooting begins
+*2023-09-28 16:24:00 @tchin and @joal restarts job again
+*2023-09-28 17:33:00 Suspect something wrong with checkpoints since on every restart the same events are being processed. Tried unaligned checkpoints to no avail.
+*2023-09-28 17:58:13 @joal suspects it's related to Kafka ingestion rather than Flink. Killed app, silenced alerts, wait for SRE
+*2023-09-29 06:48:57 @brouberol suspects ongoing Kafka broker reassignment as the issue as it is starving the broker threads. Group decided to wait for reassignment to finish over the weekend.
+*2023-10-02 07:35:21 @joal restarts flink app after reassignment finished.
+*2023-10-02 09:42:09 @joal notices average time for async operations increased, backpressure not decreasing and even slowly increasing.
+*2023-10-02 12:10:36 @tchin proposes theory and suggests increasing parallelism:
+My current theory is because of the backpressure that we’re seeing more events that have api calls that lead to bad rev id responses, and we retry those api calls just in case. By default we try 3 times with 5 seconds between each try. We also happen to have a max connection pool set to 12. If we’re constantly seeing bad events, then we’re basically decreasing the max pool size for good events by some unknown amountAfter more investigation, this combined with batching events inside eventutilities-python, probably meant that all events in the batch were being delayed if a single event in the batch was bad
+
+* 2023-10-02 14:06:21 @joal deploys parallelism increase. Backpressure finally starts decreasing.
+* 2023-10-02 16:14:00 @otto files mw-page-content-change-enrich should not retry on badrevids if no replica lag
+* 2023-10-03 12:21:51 @otto deploys a patch. Backfill speeds up >8x
+*2023-10-03 14:14:54 JOB CAUGHT UP, INCIDENT ENDS
+*00:15 (post-outage cleanup finished)
+
+TODO: Clearly indicate when the user-visible outage began and ended.
+
+
+==Detection==
+Email alert fired.alertname = MediawikiPageContentChangeEnrichJobManagerNotRunning
+
+job_name = mw_page_content_change_enrich
+
+kubernetes_namespace = mw-page-content-change-enrich
+
+prometheus = k8s
+
+release = main
+
+severity = critical
+
+site = codfw
+
+source = prometheus
+
+team = data-engineering
+
+==Conclusions ==
+
+OPTIONAL: General conclusions (bullet points or narrative)
+
+===What went well?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: automated monitoring detected the incident, outage was root-caused quickly, etc
+
+===What went poorly?===
+
+* Incident started suspiciously close to when T347521 was resolved. A small amount of effort was put into investigating this red herring.
+
+OPTIONAL: (Use bullet points) for example: documentation on the affected service was unhelpful, communication difficulties, etc
+
+===Where did we get lucky?===
+
+* …
+
+OPTIONAL: (Use bullet points) for example: user's error report was exceptionally detailed, incident occurred when the most people were online to assist, etc
+
+==Links to relevant documentation==
+
+* …
+
+Add links to information that someone responding to this alert should have (runbook, plus supporting docs). If that documentation does not exist, add an action item to create it.
+
+==Actionables==
+
+* T347884 - mw-page-content-change-enrich should not retry on badrevids if no replica lag
+** This will help with backlog processing for future backfills.
+* Figure out why copying Kafka partitions caused this issue.
+* Consider running the streaming app with more than 1 replica even in normal cases, to help with backfills or spikes. Now running with 2 replicas.
+* T345806 - mediawiki.page_content_change.v1 topic should be partitioned.  This will also help with backfills.
+
+
+Add the #Sustainability (Incident Followup) and the #SRE-OnFire  Phabricator tag to these tasks.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              		
+People                                        	Were the people who responded prepared enough to respond effectively                                              		
+People                                        	Were fewer than five people paged?                                                                                		
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     		
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.		
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        		
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   		
+Process                                       	Is there a phabricator task for the incident?                                                                     		
+Process                                       	Are the documented action items assigned?                                                                         		
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               		
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.		
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         		
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            		
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    		
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   		
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    		

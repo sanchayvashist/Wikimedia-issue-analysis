@@ -1,0 +1,139 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = T307873
+| paged-num = 0
+| responders-num = 5
+| coordinators = Keith Herron
+| start = 2022-05-04 01:28
+| end = 2022-05-09 16:40
+| metrics = No relevant SLOs exist, nor are there published metrics to quantify the impact.
+| impact = During five days, about 14,000 incoming emails from Gmail users to wikimedia.org were rejected and returned to sender.
+}}
+<!-- Reminder: No private information on this page! -->
+
+Starting on Sat 4 May 2022, incoming emails from Google Mail servers began being rejected with the log message "503 BDAT command used when CHUNKING not advertised". These errors were not noticed by us until five days later on Thu 9 May 2022. After some investigation, it was determined that disabling chunking support in Exim would mitigate the errors. During the time span of the incident about 14,000 emails were rejected with an SMTP 503 error code, the senders are naturally notified by their email provider about undelivered mail.
+
+{{TOC|align=right}}
+
+==Timeline==
+
+'''All times in UTC.'''
+
+'''2022-05-04'''
+
+*01:28 '''Exim begins rejecting some email with 503s (Impact Begins)'''
+'''2022-05-08'''
+*17:07 (bcampbell) Opens a ticket saying that multiple users have reported their emails being bounced with errors, https://phabricator.wikimedia.org/T307873
+'''2022-05-09'''
+*8:25 (jbond) replies to ticket and begins investigation 
+*13:55 (herron) '''Incident declared Herron becomes IC'''
+*14:00 (jhathaway) rolls back recently upgraded kernels, no effect
+*16:03 request to ITS to ask Google if anything has changed on their end
+*16:40 (jhathaway) '''chunking disabled in Exim, which successfully mitigates the incident, (Impact Ends)'''
+
+<!-- Reminder: No private information on this page! -->==Detection==
+The issue was first detected by users sending emails, https://phabricator.wikimedia.org/T307873. Though, the messages were rejected by Exim with a 503 error code. We do graph the number of bounced messages, but our alerting did not pick up these bounces, https://grafana.wikimedia.org/d/000000451/mail?orgId=1&from=1651536000000&to=1652227199000
+
+==Conclusions==
+Email monitoring of bounced messages does not account for all bounces.
+
+===What went well?===
+*We had a good group of SREs jump on the problem when the severity of the incident was understood.
+
+===What went poorly?===
+*The severity of the issue was not understood until five days after we first started seeing errors
+
+===Where did we get lucky?===
+*Faidon jumped into help with his extensive Exim and email knowledge even though he is no longer in a technical SRE role.
+
+===How many people were involved in the remediation?===
+*4 SREs and 1 incident commander
+
+==Links to relevant documentation==
+
+* https://wikitech.wikimedia.org/wiki/Exim
+
+==Actionables==
+* Improve monitoring, https://phabricator.wikimedia.org/T309237
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement™  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents?
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|no
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|
+|-
+! rowspan="5" |Process
+|Was the incident status section actively updated during the incident?
+|yes
+|
+|-
+|Was the public status page updated?
+|no
+|
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?
+|yes
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|no
+|
+|-
+|Were all engineering tools required available and in service?
+|yes
+|
+|-
+|Was there a runbook for all known issues present?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (c'''ount of all “yes” answers above)'''
+|10
+|
+|}

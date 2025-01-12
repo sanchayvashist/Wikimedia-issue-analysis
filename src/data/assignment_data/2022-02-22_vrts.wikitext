@@ -1,0 +1,101 @@
+{{irdoc|status=review}}
+
+==Summary==
+{{Incident scorecard
+| task = -
+| paged-num = 0
+| responders-num = 3
+| coordinators = -
+| start = 2022-02-22 08:00
+| end = 2022-02-22 16:47
+| impact = For 12 hours, incoming emails to a specific new VRTS queue were not processed with senders receiving a bounce with an SMTP 550 Error. It is estimated no "useful" emails were lost.
+}}
+<!-- Reminder: No private information on this page! -->
+
+A stuck vrts aliases generating process on mx2001 resulted in rejects for dcw@wikimedia.org, a new VRTS queue.
+
+On 2022-02-02 an SRE with long-time knowledge about VRTS received an email to their individual work address from a known VRTS admin, stating that a newly created VRTS queue "dcw@wikimedia.org" returned errors to some users that tried to use it (but not always, e.g. manual testing worked fine). The errors were of type SMTP 550 Error and looked as follows:
+ 208.80.153.45 does not like recipient.
+ Remote host said: 550 Previous (cached) callout verification failure
+A few hours later (by 2022-02-22 13:29), an investigation independently verified that email would not always be reliably sent to this VRTS email queue and the issue was escalated to a couple of other knowledgeable SREs. Given the incoming path and the fact that the only failing email address was a relatively new one not yet in widespread use, the incident was implicitly triaged as low priority. By 14:35 UTC it was verified again, adding more data points and a first theory formulated that our Google work email system was at fault as emails from other MTAs were sent out successfully but sending from wikimedia.org domains failed. However, by 16:47 UTC, it became clear that the <code>generate_otrs_aliases.service</code> systemd timer job was stuck and was not updating VRTS mailing lists/queues on mx2001 while it was running fine on mx1001 (that discrepancy explains why it was sometimes reproducible). After restart of the systemd timer job, the issue was fixed and the fix communicated to the VRTS admin.
+
+==Actionables==
+*Figure out why generate_otrs_aliases.service was stuck.
+*Alert on a stuck generate_otrs_aliases.service.
+
+<mark>TODO: Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] and the [[phab:project/profile/4626/|#SRE-OnFIRE (Pending Review & Scorecard)]] Phabricator tag to these tasks.</mark>
+
+==Scorecard==
+{| class="wikitable"
+!
+!Question
+!Score
+!Notes
+|-
+! rowspan="5" | People
+|Were the people responding to this incident sufficiently different than the previous five incidents? (score 1 for yes, 0 for no) 
+|1
+|
+|-
+|Were the people who responded prepared enough to respond effectively (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were more than 5 people paged? (score 0 for yes, 1 for no)
+|N/A
+|
+|-
+| Were pages routed to the correct sub-team(s)? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Were pages routed to online (business hours) engineers? (score 1 for yes,  0 if people were paged after business hours)
+|N/A
+|
+|-
+! rowspan="5" |Process
+| Was the incident status section actively updated during the incident? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Was the public status page updated? (score 1 for yes, 0 for no)
+|N/A
+|
+|-
+|Is there a phabricator task for the incident? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Are the documented action items assigned?  (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Is this a repeat of an earlier incident (score 0 for yes, 1 for no)
+|0
+|
+|-
+! rowspan="5" |Tooling
+|Was there, before the incident occurred, open tasks that would prevent this incident / make mitigation easier if implemented? (score 0 for yes, 1 for no)
+|0
+|
+|-
+|Were the people responding able to communicate effectively during the incident with the existing tooling? (score 1 for yes, 0 or no)
+|0
+|
+|-
+| Did existing monitoring notify the initial responders? (score 1 for yes, 0 for no)
+|1
+|
+|-
+|Were all engineering tools required available and in service? (score 1 for yes, 0 for no)
+|0
+|
+|-
+|Was there a runbook for all known issues present? (score 1 for yes, 0 for no)
+|1
+|
+|-
+! colspan="2" align="right" | Total score
+|4
+|
+|}

@@ -1,0 +1,60 @@
+
+
+==Summary==
+
+
+A subset of redundant Cassandra hosts underwent a scheduled administrative shutdown to conduct power maintenance in Codfw. During the planned outage, other Cassandra hosts were running out of disk space due to accomulating log files that Cassandra uses to repair clusters after downtime. The issue was resolved by bringing the remaining Cassandra nodes back online, ahead of schedule.
+
+== Timeline ==
+Free space became critically low on a volume housing auxiliary data on many Cassandra hosts.
+
+A number of Cassandra hosts in codfw (RESTBase cluster) were administratively taken down to conduct PDU maintenance.  The downtime scheduled was limited to hosts in the same row, a condition this cluster has been configured to tolerate; There was expected to be no impact.  However, during the planned outage, the Hinted-handoff writes resulted in unexpectedly high utilization of the corresponding storage volumes on hosts located in the eqiad datacenter.
+
+From the Cassandra documentation:Hinting is a data repair technique applied during write operations. When replica nodes are unavailable to accept a mutation, either due to failure or more commonly routine maintenance, coordinators attempting to write to those replicas store temporary hints on their local filesystem for later application to the unavailable replica.As eqiad was the active data-center at the time of the maintenance, nodes there served as coordinators for codfw replicas, and as such were tasked with storing hinted writes for the down hosts.  Hints are stored for a configurable period of time (max_hint_windowin_ms), 3 hours in our configuration, after which they are truncated.  While the loss of an entire row is something we had designed/planned for, it is not something that we have ever tested, and the storage provided is simply not large enough to hold the needed data.
+
+== Conclusions ==
+
+=== Volume Sizing ===
+Ostensibly, you would need a storage device large enough to hold max_hint_windowin_ms (currently 3 hours) worth of writes, for as many nodes as might go down.  This requires knowing not only write throughput at the time of provisioning, but also the number of nodes in the cluster (both of which are likely to change over time).  Even if you could reliably predict these values, the pathological worst-case (a partition) would require storing hints for N-1 nodes (where N is the total number of nodes), this does not seem practical.  
+
+As hinted-handoff is an only an optimization, we should focus instead on sizing storage to cover the common case (random transient node outages), and be prepared to deal with exceptional circumstances by disabling hints and/or truncating storage.
+
+In the current example, hint storage is quite small (~3G after space for commitlog), and we should consider provisioning more for future clusters to make them less sensitive to this sort of event.  However since we'll never size them large enough to rule it out, and since this is a first occurrence, it is probably not worth taking action to retrofit.
+
+=== Dedicate storage ===
+Having hints on a volume other than main storage turned out to be a great idea; Had the device filled, it would not have prevented data files from being written.  Better still would be to separate hints and commitlogs as well, had the device filled entirely we would have risked losing a small number of (unsynced) writes in a node outage.
+
+=== The role of hinted-handoff ===
+There are three mechanisms used to propagate missed writes: hinted-handoff, read-repair, and anti-entropy repair.  Of the three, only anti-entropy is meant to provide complete guarantees; Hinted-handoff and read-repair are best-effort optimizations, and cannot replace a full repair.   However, anti-entropy repair is operationally complex, and requires third-party infrastructure for coordination and tracking.  As a result we have (in the past) rationalized that hints and read-repair, combined with our use of three replicas and QUORUM consistency are Good Enough™, and have chosen not to implement full repairs.  Over time this may have translated to an increased emphasis on the importance of hints, and caused us to be overly conservative about disabling or truncating them when needed, or informed the urgency of an outage relative to the hint window.  If our use cases are not in fact tolerant of the possible inconsistencies that can develop, then we should implement anti-entropy repairs; It would be a mistake to rely on hinted-handoff to prevent inconsistency.
+
+==Actionables==
+
+*T315517 Create (and document) a process for disabling hinted-handoff during maintenance events
+*T315517 Create (and document) a process for truncating hinted-handoff 
+*T315517 Ensure that future clusters have a dedicated storage volume for hinted-handoff
+*T315517 Establish (and document) best practice for sizing of hinted-handoff volumes
+
+==Scorecard==
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	yes	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	yes	
+People                                        	Were fewer than five people paged?                                                                                	no 	no pages
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	no 	no pages
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	no 	no pages
+Process                                       	Was the incident status section actively updated during the incident?                                             	yes	
+Process                                       	Was the public status page updated?                                                                               	no 	
+Process                                       	Is there a phabricator task for the incident?                                                                     	yes	
+Process                                       	Are the documented action items assigned?                                                                         	yes	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	yes	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	yes	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	yes	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	yes	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	yes	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	no 	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	10 	

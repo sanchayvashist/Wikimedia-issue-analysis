@@ -1,0 +1,16 @@
+{{irdoc|status=final}}
+==Summary==
+Increased db load for enwiki (s1) resulted in slower responses, which in turn resulted in overall php-fpm worker limits being reached and thus affecting requests for all wikis. For requests above the limit, the error was "''upstream connect error or disconnect/reset before headers. reset reason: overflow''".
+
+'''Impact''': For about 15 minutes, backend appservers were slower or unable to respond for all wikis. This mainly affected logged-in users and most bot/API queries. Some page views from unregistered users were affected, for pages that were recently edited or otherwise expired from the CDN cache.  
+
+'''Documentation''':
+
+* Public incident task: [[phab:T291767|T291767]]
+
+* Similar to [[Incident documentation/2021-09-04 appserver latency]] and [[Incident documentation/2021-09-18 appserver latency]].
+
+==Actionables==
+
+* [[phab:T291767|T291767]] (restricted)
+* [[phab:T251885|T251885]] (restricted)

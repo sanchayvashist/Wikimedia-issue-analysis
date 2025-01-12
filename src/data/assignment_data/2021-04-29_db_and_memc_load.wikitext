@@ -1,0 +1,72 @@
+{{irdoc|status=review}}
+==Summary==
+On 14 April, a refactor of mediawiki-BagOStuff was deployed which introduced a bug that caused revision text blobs to no longer be cached in Memcached. Over a 7-day period, this gradually increased connection and query load on ExternalStore DB servers. On 22 April, the last revision-text blobs expired from Memcached, but we remained just under the DB load limits. 
+
+Around 13:00 UTC on 29 April, an unrelated increase in backend traffic that we are normally able to handle just fine, resulted in further unthrottled demand on ExternalStore DB. We were now over the load limits, and thus until the incident resolution around 18:00 UTC, there were numerous one-minute spikes where 1-10% of appserver requests responded with HTTP 5xx errors. 
+
+'''Impact''': During a period of five hours (13:00-18:00 UTC) there were 18 distinct minutes during which the error rate was severely elevated above the normal <0.1%, with various minutes having had 1-10% of backend requests responded to with errors.  
+
+{{TOC|align=right}}
+
+==Timeline==
+
+=== 14 April 2021 ===
+On 14 April, the MediaWiki [[mw:MediaWiki_1.37/wmf.1|1.37-wmf.1 branch]] ([[Deployments/Train|weekly train]]) was deployed. This included a refactor of mediawiki-BagOStuff code ([[gerrit:c/mediawiki/core/+/677064|change 677064]]), which introduced a bug that led to the revision text service ("SqlBlobStore") failing to recognise Memcached as an eligible caching layer for (new) data.
+
+During the week that followed, database connections and query load on ExternalStoreDB gradually increased more than 1400% (or 15x), from 4000 qps to 60,000 qps. This increase happened gradually because the bug only affected the decision to cache a blob after cache-miss (existing caches remained effective, so long as they were relevant and not evicted/expired). The WANObjectCache stats show an increase in revision-text cache misses, from 1 million per minute to eventually 15 million per minute.
+
+=== 22 April 2021 ===
+On 22 April, any remaining revision-text blobs expired from Memcached per their 7-day expiry. This further increased ExternalStoreDB load to 103,000 gps (25x from normal), and Memcached cache misses to 30 million per minute (30x from normal).
+
+Despite these huge increases, we have sufficient capacity and this did not (yet) result in significant user impact.
+
+Having said that, this level of increase in backend traffic is not something we would normally expect to see even under high load (as Memcached is meant to absorb that in a way that shouldn't result in linear increase on DB servers). As such, there may be an action item for additional alerting to serve as non-critical warning signs.
+
+=== 29 April 2021 ===
+[[File:Appserver errors 2021-04-29.png|thumb|Error rate spikes on 29 April.]]
+Around 13:00 UTC, an unrelated event resulted in not-unusual increase in backend/appserver web requests. These spikes are normal and seen once or twice a month, and usually don't have impact on other web requests, apart from small increases in utilization of appservers, memcached, etc. However, as revision-text cache now had a flat hit-rate of <code>0.0</code>, this traffic translated more or less 1:1 in ExternalStoreDB connections and query load, from 100K gps (since 22 April) further up to 160K gps (now 40x from normal).
+
+In the hour that followed, there were numerous brief spikes where many requests are served HTTP 50x errors due to MediaWiki encountering a fatal error (DBConnectionError:  Too many connections).
+
+'''All times in UTC''' ([https://sal.toolforge.org/production?p=0&q=deploy1002&d=2021-04-29 SAL])
+
+* 12:58 Appserver traffic increases from 5K/s to 6K/s.
+* 13:06 <liw@deploy1002> rebuilt and synchronized wikiversions files: group1 wikis to 1.37.0-wmf.3.
+
+* 13:41 Lars reports [[phab:T281480|T281480 (DBConnectionError Too many connections)]]. These are seen in Logstash in small bursts, but too short for alerting to fire. Seemingly normal/organic.
+* 15:39 Jaime investigates the ticket.
+* 16:24 Effie starts reverting a change to Memcached on-host tier socket configuration, in case it is caused by that ([[gerrit:c/operations/puppet/+/683682/|change 683682 in puppet.git]]).
+* 16:28 <liw@deploy1002> rebuilt and synchronized wikiversions files: Revert "group1 wikis to 1.37.0-wmf.1".
+* 16:37 Incident opened. Reuven (rzl) becomes IC, taking over from Joe who’d been doing it informally.
+* 16:45 Appserver traffic is going back to normal. Task T281480 is marked as train blocker, as the incident seems to align with the wmf.3 branch roll-out and rollback.
+
+* 17:36 Aaron submits the fix to mediawiki-BagOStuff for code review ([[gerrit:c/mediawiki/core/+/683692|change 683692]]).
+* 18:07 Fix reviewed, merged, and validated on mwdebug1002.
+* 18:10 Fix backported onto php-1.37.0-wmf.3.
+* 18:38 Fix backported onto php-1.37.0-wmf.1.
+
+==Detection==
+
+* [https://grafana.wikimedia.org/d/000000278/mysql-aggregated?orgId=1&from=1617919200000&to=1619721000000&var-site=eqiad&var-group=core&var-shard=es5&var-shard=es4&var-shard=es3&var-shard=es2&var-shard=es1&var-role=All Grafana: MySQL load (queries, connections)]
+* [https://grafana.wikimedia.org/d/lqE4lcGWz/wanobjectcache-key-group?orgId=1&from=1617919200000&to=1619721000000&var-kClass=SqlBlobStore_blob Grafana: WANObjectCache stats (cache misses)]
+* [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1619690400000&to=1619737200000 Grafana: Application Servers (traffic, latencies, error rate)]
+* [[phab:T281480|T281480: SqlBlobStore no longer caching blobs, DBConnectionError Too many connections]]
+
+==Conclusions==
+===What went well?===
+*We had enough capacity so this incident didn't cause any visible user impact, until April 29th ofc. 
+
+===What went poorly?===
+*We don't have any alerts that would have notified us earlier about this
+
+===Where did we get lucky?===
+*we had enough capacity so this incident didn't cause any visible user impact, until April 29th ofc. 
+
+===How many people were involved in the remediation?===
+*3 SREs, 1 dev + 1 incident commander
+
+==Links to relevant documentation==
+
+==Actionables==
+*{{phabricator|T281833}} (secondary metric -database qps- monitoring improvement)
+* Revert https://gerrit.wikimedia.org/r/c/operations/puppet/%2B/683682/ (not the cause)

@@ -1,0 +1,188 @@
+{{irdoc|status=review}}
+
+== Summary ==
+{{Incident scorecard
+| task = T347481
+| paged-num = 0
+| responders-num = 7
+| coordinators = Ben Tullis
+| start = 2023-09-26 20:00:00
+| end = 2023-09-27 14:05:00
+| metrics = No relevant SLOs exist
+| impact = Minimal user facing outages. Wikidata Query Service update pipline was stuck, which led to significant update lag on WDQS. Possible delay to downstream pipeline processing, but no data loss expected.
+}}
+
+= '''Current status: resolved''' =
+{| class="wikitable"
+|''incident coordinator:'' '''Ben Tullis'''
+|''status last updated:'' '''n/a'''
+|}
+''Responders''''': Luca Toscano ,Balthazar Rouberol, Steve Munene, Joseph Allemandou, David Causse (WDQS), Peter Fischer (WDQS)'''
+
+Provide some bullet points communicating:
+
+* End users of mediawiki projects are not currently affected
+** We are seeing mirror makers crashing and restarting, when mirroring topics from main-eqiad to kafka-jumbo.
+** This may have a knock-on effect on our data processing pipelines, but we are not aware of any data loss at the moment.
+** Wikidata Query Service updates were lagging during the outage, leading to self-throttling of bots and stale data being returned to users.
+* The mirror-maker processes start up successfully, but then crash at some time afterwards.
+* They are restarted by systemd, but continue to crash in this loop.
+* We have not seen any other mirror-maker processes fail
+[[File:Mirror-maker-2023-09-28 09-59.png|alt=Graphs of the topic replication rate and consumer lag |frameless|660x660px]]
+
+{{TOC|align=right}}
+
+==Timeline==
+
+
+''All times in UTC.''
+
+* 20:00 UTC First set of crashes recorded by Icinga, affecting all main_eqiad_to_jumbo_eqiad@0 services
+* Processes restarted by puppet on each of the servers of the next 30 minutes
+* 20:30 UTC Another slew of crashes followed by recoveries.
+* 20:42 UTC we also received a ‘message rate too low’ alert
+* PROBLEM - Kafka MirrorMaker main-eqiad_to_jumbo-eqiad average message produce rate in last 30m on alert1001 is CRITICAL: 0 le 0 
+* The topics were effectively blocked from replicating between 20:00 and around 08:08
+* 07:08 UTC Steve Munene reponds on IRC and requests assistance. Luca Toscano and Balthazar Rouberol also begin investigating.
+
+Tests seem to show that running with 9 mirror maker processes is stable, but if we increase the number of mirror maker processes to 15 (which is what puppet wants to do) then it becomes unstable again.
+
+We have seen RecordTooLargeException messages on kafka-main1003. Only this broker.
+
+First and last RecordTooLargeException messages from the <code>/var/log/kafka/server.log</code> file on kafka-main1003.<syntaxhighlight lang="shell-session">
+[2023-09-26 19:54:46,039] ERROR [GroupMetadataManager brokerId=1003] Appending metadata message for group kafka-mirror-main-eqiad_to_jumbo-eqiad generation 15610 failed due to org.apache.kafka.common.errors.RecordTooLargeException, returning UNKNOWN error code to the client (kafka.coordinator.group.GroupMetadataManager)
+
+[2023-09-27 08:28:05,100] ERROR [GroupMetadataManager brokerId=1003] Appending metadata message for group kafka-mirror-main-eqiad_to_jumbo-eqiad generation 19944 failed due to org.apache.kafka.common.errors.RecordTooLargeException, returning UNKNOWN error code to the client (kafka.coordinator.group.GroupMetadataManager)
+</syntaxhighlight>These generation numbers appear generally in sequence, but there are some missing. I don’t know if this is relevant, but here is the list of missing generation numbers from .
+
+* 10:30 UTC We have been running on 9 mirror maker processes for some time with no problems observed. There have been no more RecordTooLargeException errors on kafka-main1003 since the last one at 08:28
+* 12:30 UTC elukey slowly started re-enabling the mirrormakers over the next 30 minutes
+* 13:00 UTC as the mirrormaker for kafka-jumbo1015 was re-enabled it triggered another failure, with the same logs at the broker side.
+* 13:10 We tried another test by stopping the mirrormaker on kafka-jumbo1001 and starting it on kafka-jumbo1015 - This was stable, which indicates that it is the 15th mirrormaker that causes the instability.
+* 13:45 After some research, documented https://phabricator.wikimedia.org/T347481#9203313 we reason that the only way to fix this bug would be to increase the max.message.size on the kafka-main brokers. However, we don’t want to change this setting on the other clusters, so we have decided instead to limit the number of mirrormaker instances to 9 instead of 15. 
+* 14:00 Luca proposes a patch https://gerrit.wikimedia.org/r/c/operations/puppet/+/961397 to exclude mirrormaker from the soon-to-be-decommissioned hosts, kafka-jumbo100[1-6]
+* 14:05 Ben merges and deploys the patch, runs puppet on all kafka-jumbo brokers and removes downtime. Incident resolved.
+
+==Detection==
+The issue was first detected by Steve Munene and other engineers checking the #wikimedia-analytics IRC channel
+
+We saw lots of Icinga messages like this:
+
+<code>PROBLEM - Kafka MirrorMaker main-eqiad_to_jumbo-eqiad@0 on kafka-jumbo1001 is CRITICAL: PROCS CRITICAL: 0 processes with command name java, regex args kafka.tools.MirrorMaker.+/etc/kafka/mirror/main-eqiad_to_jumbo-eqiad@0/producer\.properties [[Kafka/Administration#MirrorMaker|https://wikitech.wikimedia.org/wiki/Kafka/Administration%23MirrorMaker]]</code>
+
+<code>PROBLEM - Kafka MirrorMaker main-eqiad_to_jumbo-eqiad average message consume rate in last 30m on alert1001 is CRITICAL: 0 le 0 [[Kafka/Administration#MirrorMaker|https://wikitech.wikimedia.org/wiki/Kafka/Administration%23MirrorMaker]] <nowiki>https://grafana.wikimedia.org/d/000000521/kafka-mirrormaker?var-datasource=eqiad+prometheus/ops&var-lag_datasource=eqiad+prometheus/ops&var-mirror_name=main-eqiad_to_jumbo-eqiad</nowiki></code>
+
+<code>PROBLEM - Kafka MirrorMaker main-eqiad_to_jumbo-eqiad average message produce rate in last 30m on alert1001 is CRITICAL: 0 le 0 [[Kafka/Administration|https://wikitech.wikimedia.org/wiki/Kafka/Administration]] <nowiki>https://grafana.wikimedia.org/d/000000521/kafka-mirrormaker?var-datasource=eqiad+prometheus/ops&var-lag_datasource=eqiad+prometheus/ops&var-mirror_name=main-eqiad_to_jumbo-eqiad</nowiki></code>
+
+We also saw AlertManager alerts like this:
+
+<code>(SystemdUnitCrashLoop) firing: (15)  crashloop on kafka-jumbo1001:9100 - TODO - <nowiki>https://grafana.wikimedia.org/d/g-AaZRFWk/systemd-status</nowiki> - <nowiki>https://alerts.wikimedia.org/?q=alertname%3DSystemdUnitCrashLoop</nowiki></code>
+
+==Conclusions ==
+
+* We think that the root cause is a bug in our version of Kafka and/or Mirrormaker
+* This triggers when we increase the number of mirrormaker instances pulling from kafka-main-eqiad to kafka-jumbo to exactly 15 (or probably more)
+* There is a proposed workaround, but this requires changing the settings of kafka-main, which we did not want to do.
+
+===What went well?===
+
+* We believe that there was no data loss.
+
+===What went poorly?===
+
+* We had a period of almost 12 hours when messages weren't being replicated to kafka-jumbo from kafka-main-eqiad.
+* Poor sandboxing of the WDQS updater test instance caused the production WDQS updater to process too many reconciliation causing excessive lag in eqiad for 2 hours
+
+===Where did we get lucky?===
+
+* Nothing in particular.
+
+==Links to relevant documentation==
+
+* [[Kafka/Administration]]
+
+==Actionables==
+
+* [[phab:T300102|Upgrade Kafka to 2.x or 3.x]]
+* We could consider whether we want to change the settings on kafka-main but for now we have just selected a smaller number of mirrormakers.
+* [[phab:T347515]]: better sandboxing of the WDQS updater test instance
+
+==Scorecard==
+
+
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|
+|
+|-
+|Were fewer than five people paged?
+|
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|
+|
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|
+|
+|-
+|Is there a phabricator task for the incident?
+|
+|
+|-
+|Are the documented action items assigned?
+|
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are''
+''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|
+|
+|-
+|Did existing monitoring notify the initial responders?
+|
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|
+|
+|}

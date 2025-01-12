@@ -1,0 +1,131 @@
+{{irdoc|status=final}}
+
+== Summary ==
+{{Incident scorecard
+| task = T363709
+| paged-num = 1
+| responders-num = 2
+| coordinators = [[User:FNegri]]
+| start = 2024-04-28 13:39
+| end = 2024-04-28 14:36
+| metrics = No relevant SLOs exist
+| impact = Toolforge tools using Redis suffered intermittent connection errors for the duration of the incident.
+}}
+
+Toolforge Redis refused new connections because there were too many active connections. This happened intermittently for 1 hour until the service was restarted manually.
+
+{{TOC|align=right}}
+
+==Timeline==
+''All times in UTC.''
+
+* 13:39 '''OUTAGE BEGINS'''. Toolschecker detects a problem and sends a page
+* 13:44 Francesco Negri acks the page and starts investigating. During the investigation (no actions performed) the alert resolves by itself, then triggers again, for 6 times.
+* 14:15 redis-cli info replication shows "slave" on 2 hosts (tools-redis-[56]), and "ERR max number of clients reached" on the third host (tools-redis-7)
+* 14:24 Taavi Väänänen suggests restarting the service
+* 14:26 A Toolforge user (Sohom Datta) reports in #wikimedia-cloud that their tool is unable to connect to Redis
+* 14:35 Francesco Negri fails over Redis from tools-redis-7 to tools-redis-6
+* 14:36 Francesco Negri restarts the service on tools-redis-7 with systemctl restart redis-instance-tcp_6379.service
+* 14:36 '''OUTAGE ENDS.'''
+
+==Detection==
+Toolschecker detected a problem with Redis and Icinga fired an alert. This was routed to Alertmanager and to VictorOps. VictorOps sent a page to the on-call engineer ([[User:FNegri]]).
+
+==Conclusions ==
+
+===What went well?===
+
+* The alert fired instantly, and we started looking at the issue before receiving any reports from end users.
+
+===What went poorly?===
+
+* The runbook for the alert did not mention a similar problem happened before and how it was fixed.
+
+===Where did we get lucky?===
+
+* Taavi happened to be online and was able to provide advice, being the person who resolved the previous occurrence.
+
+==Links to relevant documentation==
+
+* [[Portal:Toolforge/Admin/Runbooks/Redis]]
+
+==Actionables==
+
+* {{done}} [[phab:T363709]]
+
+==Scorecard==
+{| class="wikitable"
+|+[[Incident Scorecard|Incident Engagement  ScoreCard]]
+!
+!Question
+!Answer
+(yes/no)
+!Notes
+|-
+! rowspan="5" |People
+|Were the people responding to this incident sufficiently different than the previous five incidents? 
+|yes
+|
+|-
+|Were the people who responded prepared enough to respond effectively
+|yes
+|
+|-
+|Were fewer than five people paged?
+|yes
+|
+|-
+|Were pages routed to the correct sub-team(s)?
+|yes
+|
+|-
+|Were pages routed to online (business hours) engineers?  ''Answer “no” if engineers were paged after business hours.''
+|no
+|during a weekend
+|-
+! rowspan="5" |Process
+|Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?
+|no
+|
+|-
+| Was a public wikimediastatus.net entry created? 
+|no
+|WMCS incident
+|-
+|Is there a phabricator task for the incident?
+|yes
+|
+|-
+|Are the documented action items assigned?
+|yes
+|
+|-
+|Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence? 
+|no
+|
+|-
+! rowspan="5" |Tooling
+|To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? ''Answer “no” if there are'' ''open tasks that would prevent this incident or make mitigation easier if implemented.''
+|yes
+|
+|-
+| Were the people responding able to communicate effectively during the incident with the existing tooling?
+|yes
+|
+|-
+|Did existing monitoring notify the initial responders?
+|yes
+|
+|-
+|Were the engineering tools that were to be used during the incident, available and in service? 
+|yes
+|
+|-
+|Were the steps taken to mitigate guided by an existing runbook?
+|no
+|
+|-
+! colspan="2" align="right" |Total score (count of all “yes” answers above)
+|10
+|
+|}

@@ -1,0 +1,158 @@
+{{irdoc|status=draft}} <!--
+The status field should be one of:
+* {{irdoc|status=draft}} - Initial status. When you're happy with the state of your draft, change it to status=review.
+* {{irdoc|status=review}} - The incident review working group will contact you then to finalise the report. See also the steps on [[Incident documentation]].
+* {{irdoc|status=final}}
+-->
+
+== Note ==
+
+This [[Switch_Datacenter|datacenter switchover]] was a ''planned'' maintenance operation, not a problem handled reactively as documented in most incident reports. This retrospective is written in the same format, to help us reach the same conclusions about user impact, lessons learned, and improvements for next time.
+
+== Summary ==
+<mark>What happened, in one paragraph or less. Avoid assuming deep knowledge of the systems here, and try to differentiate between proximate causes and root causes.</mark><!-- Reminder: No private information on this page! -->
+
+'''Impact''': <mark>Who was affected and how? In one paragraph or less.  For user-facing outages, estimate: How many queries were lost? How many users were affected, or which populations (editors? readers? particular geographies?), etc.  Do not assume the reader knows what your service is or who uses it.</mark>
+
+* <mark>Impact statement for read-only period</mark>
+* <mark>Impact statement for Kartotherian</mark>
+* <mark>Impact statement for search</mark>
+* <mark>Impact statement for increased save times</mark>
+
+{{TOC|align=right}}
+
+== Timeline ==
+
+'''All times in UTC.'''
+
+=== Services/traffic switchover: 2020-08-31 ===
+
+* 14:00: Tracking doc started just in case. rzl becomes IC.
+* 14:12: First attempt at sre.switchdc.services.00-reduce-ttl-and-sleep fails due to slow update and insufficient retries. ([https://phabricator.wikimedia.org/T260889 T260889])
+* 14:18: Second attempt at 00-reduce-ttl-and-sleep succeeds.
+* 14:21: Services switched to codfw: apertium, termbox, search, api-gateway, ores, sessionstore, eventgate-main, graphoid, eventstreams, wikifeeds, wdqs, parsoid, eventgate-logging-external, wdqs-internal, echostore, mathoid, mobileapps, proton, restbase, kartotherian, recommendation-api, eventgate-analytics-external, restbase-async, citoid, schema, cxserver, eventgate-analytics, zotero.
+* 14:28: Kartotherian #pages.
+* 14:28: purged alerts begin firing on all cache nodes; discussion moves to #wikimedia-sre because of icinga-wm spam.  This alert is reasonable in the usual case, but here it is merely a false alarm.
+* 14:33: ema diagnoses Kartotherian as being CPU-starved in codfw; the service is underprovisioned without eqiad being available.
+* 14:33: rzl repools Kartotherian in eqiad.
+* 14:35: Kartotherian alerts recover.
+* 14:38: Kartotherian@codfw has mostly worked through its backlog; latency and CPU saturation numbers are recovering.
+* 14:58: ema depools eqiad cache. ([https://gerrit.wikimedia.org/r/c/operations/dns/+/623360 623360])
+* 15:34: rzl runs 02-restore-ttl.
+* 15:51: rzl depools swift.discovery.wmnet in eqiad
+* 16:06: joe and cdanis note some broken thumbnails for the most recent images on https://commons.wikimedia.org/wiki/Special:NewFiles -- HTTP 429 status, potentially implicating Thumbor.  (These do recover on their own on a page refresh.)
+* ~16:30: Thumbor 429 responses in codfw seem to be trending down-ish.
+
+=== MediaWiki: 2020-09-01 ===
+
+* 09:33: joe patches confd config to read only from etcd eqiad, working around the update slowness in etcd2. ([https://gerrit.wikimedia.org/r/c/operations/puppet/+/623535 623535], [https://phabricator.wikimedia.org/T260889 T260889])
+* 13:30: Banners posted on all wikis.
+*: [Due to caching, these appeared inconsistently for the first few minutes, causing some initial confusion as to whether they had posted at all.]
+* 13:36: rzl runs 00-disable-puppet.
+* 13:37: rzl runs 00-reduce-ttl. TTL changes apply much more quickly this time than the previous day, since all confd servers are pointed at eqiad.
+* 13:40: rzl runs 00-warmup-caches.
+* 13:44: rzl reruns 00-warmup-caches (#2).
+* 13:50: rzl reruns 00-warmup-caches (#3).
+*: [Since Timo’s changes ([https://gerrit.wikimedia.org/r/c/operations/puppet/+/617745 617745], [https://gerrit.wikimedia.org/r/c/operations/puppet/+/617747 617747]), the warmup script uses a much shorter list of URLs, completing much faster than previously (1m32s) -- this caused some uncertainty about whether the warmup would still be effective.
+*: [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1598967000000&to=1598968800000&var-datasource=codfw%20prometheus%2Fops&var-cluster=appserver&var-method=GET&var-code=200 Appserver 95th percentile request latency] for the three warmup runs shows the expected pattern: the first warmup run is quite slow, then the second and third are much faster.
+*: However, [https://grafana.wikimedia.org/d/RIA1lzDZk/application-servers-red-dashboard?orgId=1&from=1598967000000&to=1598972400000&var-datasource=codfw%20prometheus%2Fops&var-cluster=appserver&var-method=GET&var-code=200 expanding the graph to include the MW switchover at 14:03], we see another spike in request latency, which drops off after the first few minutes. This may be due to traffic-slosh effects on MW and its dependencies, but it may also indicate that some cache-warming codepaths were missed by the warmup script.]
+* 13:58: rzl runs 01-stop-maintenance. It completes with ''“Stray php processes still present on the maintenance host, please check”'' due to a still-running dump process -- this is expected, as dumps are singly homed in eqiad and unaffected by the switch.
+* 14:02: rzl runs 02-set-readonly. '''Start of read-only period.'''
+* 14:02: SREs and volunteers attempt to make test edits on a number of wikis, via both desktop and mobile, and confirm read-only state.
+* 14:03: rzl runs 03-set-db-readonly.
+* 14:03: rzl runs 04-switch-mediawiki.
+* 14:04: rzl runs 05-invert-redis-sessions.
+* 14:04: rzl runs 06-set-db-readwrite.
+* 14:04: rzl runs 07-set-db-readwrite. '''End of read-only period, total duration 2m49s.''' The script applies the change successfully but fails to verify it, with five consecutive request timeouts attempting to fetch siteinfo from api.svc.codfw.wmnet.
+* 14:04: SREs and volunteers make test edits and confirm read-write state.
+* 14:06: First of 24 DB alerts, half of which paged: ''PROBLEM - MariaDB read only x1 #page on db1103 is CRITICAL: CRIT: read_only: True, expected False''
+*: [This was just alerting noise caused by a mismatch between the expected state (eqiad RW) and the monitoring-expected state (codfw RW), in turn due to puppetmaster1002’s confd failing to pick up the etcd state change. [https://phabricator.wikimedia.org/T261767 T261767] tracks.]
+* 14:07: rzl reruns 07-set-readwrite, which has no effect on production (ReadOnly already set to False) but this time the siteinfo check succeeds.
+* 14:08: ema notes elevated 500s in Varnish [https://grafana.wikimedia.org/d/myRmf1Pik/varnish-aggregate-client-status-codes?orgId=1&from=1598967000000&to=1598972400000&var-site=codfw&var-site=eqiad&var-site=eqsin&var-site=esams&var-site=ulsfo&var-cache_type=varnish-text&var-status_type=5&var-method=GET&var-method=HEAD&var-method=POST (graph)], which cdanis traces to Restbase and then to cirrussearch.
+*: [This was escalated to dcausse, ryankemper, and gehel from the Search Platform team, and root-caused to the Cirrus query cache, which had not been prewarmed in codfw. The cache was supposed to be replicated cross-dc after a similar issue in the 2018 switchover, but apparently was not. With an empty cache, Restbase served "Search is currently too busy. Please try again later." errors. Capacity recovered on its own as the cache filled [https://grafana.wikimedia.org/d/000000455/elasticsearch-percentiles?orgId=1&from=1598967000000&to=1598983200000&var-cirrus_group=codfw&var-cluster=elasticsearch&var-exported_cluster=production-search&var-smoothing=1 (graph)].]
+* 14:09: jynus observes a small bump in mysql traffic post-switchover, probably due to users manually retrying edits after the RO period ended.
+* 14:10: Discussion moves from #wikimedia-operations to #wikimedia-sre due to Icinga noise from the DB read_only alerts.
+* 14:14: rzl runs 08-restore-ttl.
+* 14:15: marostegui adjusts codfw DB weights.
+* 14:17: rzl runs 08-start-maintenance.
+* 14:17: ''PROBLEM - Check the last execution of mediawiki_job_wikibase_repo_prune_test on mwmaint1002 is CRITICAL''
+*: [And another similar alert at 14:20. This is spurious, caused by stale results from confd.]
+* 14:18: rzl runs 08-update-tendril, the end of the cookbook.
+* 14:21: godog observes elevated MediaWiki exceptions (graph), which turn out to be ''“You can’t edit right now.”'' errors from jobrunners in eqiad. Even though DNS records for jobrunner.discovery.wmnet were updated correctly, they’re still trying to write in eqiad due to changeprop creating persistent connections and not re-resolving the hostname.
+* 14:22: joe restarts confd on mwmaint1002.
+* 14:28: ''PROBLEM - MariaDB Replica Lag: m2 on db2078 is CRITICAL: CRITICAL slave_sql_lag Replication lag: 32691973.98 seconds''
+*: [The lag is a little over a year. marostegui investigates, noting m2 is not user-facing.]
+* 14:28: joe restarts envoy on all eqiad jobrunners to break connections from cpjobqueue, resolving the can’t-edit exceptions.
+* 14:31: ''PROBLEM - Host mw2267 is DOWN: PING CRITICAL - Packet loss = 100%.'' volans checks it.
+* 14:46: mutante observes icinga warnings (but no criticals) about codfw power supply infeed loads.
+* 14:46: kormat observes <code>mediawiki::state('primary_dc')</code> returning inconsistent results, which volans traces to puppetmaster1002 seeing a different confd state than the other five puppetmasters, due to ''“ERROR client: etcd cluster is unavailable or misconf; error #1: x509: certificate has expired or is not yet valid”''.
+*: [This was the root cause of the DB alerting noise earlier.]
+* 14:49: volans restarts confd on puppetmaster1002; it reaches etcd normally and resolves the split-brain.
+* 15:22: mark points out a 1-3 second increase in 75th-percentile save time. [https://grafana.wikimedia.org/d/000000085/save-timing?orgId=1&from=1598832000000&to=1598983200000 (Perf Team dashboard)]
+*: [This was resolved by repooling eventgate-main in both DCs, and moving restbase-async to eqiad-only. <mark>TODO: Add more information.</mark>]
+
+== Detection ==
+<mark>Write how the issue was first detected.  Was automated monitoring first to detect it? Or a human reporting an error?</mark>
+
+<mark>Copy the relevant alerts that fired in this section.</mark>
+
+<mark>Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?</mark>
+
+<mark>TODO: If human only, an actionable should probably be to "add alerting".</mark>
+
+== Conclusions ==
+=== What went well? ===
+
+* Our automation conducted the switchover cleanly, with no need for manual intervention.
+* Dry-run and live-test modes enabled us to safely exercise almost every line of the scripts ahead of time, identifying sections that had gotten stale since the last test, and correct them before the scheduled exercise.
+* Because each section of the cookbook was idempotent, we could safely and confidently rerun when a check failed due to a transient error.
+* The critical period of the switchover—i.e. the interval between setting the wikis read-only and setting them read-write again—is now comprised of a drastically shorter set of steps and no Puppet run, due to improvements and simplifications in our architecture. 
+
+=== What went poorly? ===
+
+''N.B.'' This section includes items that would have gone poorly in a real emergency. Discovering them now, as part of a test, meant that we could mitigate them quickly because eqiad wasn’t really unavailable. That’s why we ran this exercise, and finding these problems means the ''exercise'' was a success.
+
+* Kartotherian was underprovisioned in codfw. When it was depooled from eqiad, codfw alone was unable to handle the full load, and Maps suffered an outage until we repooled eqiad.
+* After MediaWiki was switched, appservers’ tail request latency spiked for a few minutes, suggesting their caches may not have been fully prepared by the prewarming script.
+* The Cirrus query cache wasn't prewarmed in codfw, despite the expectation that it was replicated between data centers. With a cold cache, Search was over capacity and served errors through Restbase until the cache filled naturally.
+* Edit save time was elevated by 1-3 seconds at the 75th percentile after the switch, due to Kafka latency.
+* When MediaWiki was switched, puppetmaster1002 failed to pick up the etcd state change, due to a latent cert error. This resulted in inconsistent behavior from Puppet, including some spurious alerts, until it was corrected.
+
+=== Where did we get lucky? ===
+
+* Broad human communication was sufficient to avoid any incompatible maintenance at the same time as the switchover, but there was no engineered control (such as a puppet-merge lock) to prevent it from happening.
+
+== Links to relevant documentation ==
+* [[Switch Datacenter]]
+* [[meta:Tech/Server_switch_2020]]
+
+== Actionables ==
+* Thumbor has dnsdisc conftool records, but they don’t appear to be used:
+*: rzl@cumin1001:~$ confctl --quiet --object-type discovery select dnsdisc=thumbor get
+*: {"codfw": {"pooled": false, "references": [], "ttl": 300}, "tags": "dnsdisc=thumbor"}
+*: {"eqiad": {"pooled": true, "references": [], "ttl": 300}, "tags": "dnsdisc=thumbor"}
+*: They may be a relic from when swift wasn’t active/active; we should be able to clean them up.
+* [nitpick] Message “Failed to call …00-reduce-ttl-sleep” seems slightly misleading; it got called but didn’t succeed/failed?
+* False-alerts for “Time elapsed since the last kafka event processed by purged on host is CRITICAL: … topic=eqiad.resource-purge” (fixed) and an unknown for “Elevated latency for eventgate-logging-external eqiad”
+* Kartotherian in codfw could not cope with the load, eqiad needed repooling, solution may be more hardware (on the way)
+* Remove swift from EXCLUDED_SERVICES in sre.switchdc.services and add it to the default list, as we use that DNS record after all. Addressed in {{Gerrit|626403}}
+* Consider a puppet-merge lock/warning, global host MOTD, or other last-minute production-wide lockout/tagout
+* Future “attach to tmux” commands should enforce a minimum terminal size requirement
+* Consider re-adding the 5m sleep after reducing TTL, since the warmup script now takes less than five minutes to complete
+* Consider automatically adding Grafana annotation(s) for critical operations from the cookbook(s)
+* 08-update-tendril:<marostegui> parsercache (pc1,p2 and pc3) should have been changed too, but they were not, that's not important
+* WRT Elasticsearch & /related/ page feature issues: dcausse@ says that, in the 2018 switchover, they took an existing capacity cache for elasticsearch and made it replicated cross-DC, because otherwise elasticsearch falls over without it.  However, the hit rate for such plummeted during this switchover [https://grafana.wikimedia.org/d/000000455/elasticsearch-percentiles?viewPanel=55&orgId=1&from=1598967571315&to=1598970596798&var-cirrus_group=codfw&var-cluster=elasticsearch&var-exported_cluster=production-search&var-smoothing=1 (graph)]
+* Changeprop uses consistent connections that need to be killed during the switchover.  Adding a step to restart the Envoy TLS terminators on the old-DC jobrunners would be sufficient to force a reconnect.
+* Confd on mwmaint1002 needed to be restarted manually, worth checking why
+** [Riccardo] Additional hosts had confd stuck, all for the same reason AFAICT, the expired certificate. I bet is due to the Puppet CA rotation we did a while ago, the one host I checked was having confd not restated for 10 months.
+** [Riccardo] I suggest to add a step to restart all confd in the preparation phase.        
+* Dewiki had an extra maintenance message telling that we would add a new DC (below the generic maintenance message) <mark>TODO: include screenshot from doc</mark>
+* There was a lot of confusion and alerts spam from primary db read only status. While a better setup (icinga allowing) or downtiming should had happened, a worse underlying issue was detected- confctl was not giving current results on puppetmaster1002, which was used primarily to configure alerts and its urgency on puppet (icinga). Task: [https://phabricator.wikimedia.org/T261767 T261767]
+* might be useful in the future for that kind of purpose to not move all services (https://sal.toolforge.org/log/PHHkRHQBLkHzneNNOEPw ) at once. even doing them 1 minute apart would have helped here (5min apart would be nice)
+* [https://phabricator.wikimedia.org/T261763 T261763] save timing increase
+* We’d still like to get rid of maintenance cronjobs, so that we can eliminate the 01-stop-maintenance and 08-start-maintenance steps (the latter includes a Puppet run). The only cron left is the WDQS dispatcher; everything else has been migrated to mediawiki::periodic_job, which reads the active DC from etcd.
+* DB CPU saturation dashboard exists for eqiad but not codfw. Task: [https://phabricator.wikimedia.org/T261868 T261868]
+* Understand this log entry from 04-switch-mediawiki: ''2020-09-01 14:03:43,668 rzl 28797 [INFO] Sleeping 23.459 seconds to reach the 10 seconds mark''
+* In 07-set-readwrite, if the siteinfo fetch times out, consider retrying on a different appserver, instead of failing immediately.
+* Improvements for mwmaint switchover crons vs noc.wm webserver (Daniel) [https://phabricator.wikimedia.org/T265936 T265936]
+<mark>TODO: Link to or create a Phabricator task for every step. Add the [[phab:project/view/4758/|#Sustainability (Incident Followup)]] Phabricator tag to these tasks.</mark>

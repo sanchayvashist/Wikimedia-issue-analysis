@@ -1,0 +1,86 @@
+
+
+== Summary ==
+
+
+On-wiki search for all wikis was delayed or unavailable for a subset of end users.
+
+
+
+==Timeline==
+
+14:00 UTC Primary datacenter switches from EQIAD to CODFW.
+
+14:00 A portion of queries (up to 25% at peak) begin being rejected by the PoolCounter during the incident window; rejections will continue for the next half hour. The spike in rejections was caused by long request response times that were themselves worsened by the unexpected decline in cache hit rate from 71.6% to 55.5%
+
+14:08 Alert "CirrusSearch codfw 95th percentile latency - more_like" fires
+
+14:14 Hashar pings in #wikimedia-search. Dcausse, inflatador and pfischer begin troubleshooting.
+
+14:26 Grafana shows extremely high load on elastic2044, inflatador bans this node from the cluster and latency begins to drop back to normal.
+
+14:34 claime confirms impact has passed.
+
+14:35 Poolcounter rejections are now at zero.
+
+==Detection==
+Was automated monitoring first to detect it? Or a human reporting an error?
+
+Monitoring caught it, but not quickly enough for humans to prevent user-facing impact.
+
+Copy the relevant alerts that fired in this section.
+
+** PROBLEM alert - graphite1005/CirrusSearch codfw 95th percentile latency - more_like is CRITICAL (Grafana alert sent to IRC and Search Platform email list)
+
+Did the appropriate alert(s) fire? Was the alert volume manageable? Did they point to the problem with as much accuracy as possible?
+
+Yes to all questions.
+
+==Conclusions ==
+
+===What went well?===
+
+* SREs were at a heightened state of awareness due to DC switchover, so impact was recognized immediately.
+* Mitigation was quick and easy (banning a single node). Incident resolved within ~30m, whether due to self-healing or due to the aforementioned node ban.
+
+===What went poorly?===
+
+* We had expected all more_like queries to route to eqiad (corresponding to the non-primary mediawiki datacenter), but instead they routed to codfw. The underlying cause appears to be that the restbase requests were sent as POST rather than GET which forced routing to the primary datacenter (codfw) instead of the non-primary (eqiad).
+
+==Links to relevant documentation==
+
+* Switch Datacenter#ElasticSearch 
+
+==Actionables==
+
+* Determine what Elasticsearch-related steps are needed prior to a datacenter switchover.
+* Update documentation as mentioned in "Links to relevant documentation" section above.
+* Review https://phabricator.wikimedia.org/T285347 (suggestions for switchover improvements) and decide whether to implement.
+* phab:T347034 Update the RESTBase /related/{article} endpoint to make a GET request and not a POST in order to help having a CirrusSearch query cache warm in both DC when running multi-DC
+* Review current shard balance for busy wikis, particularly enwiki_content. In my haste to mitigate, I (inflatador) did not check the shards of the highly-loaded host. Dcausse theorized that two enwiki shards may have been on the same host, which is extremely expensive, particularly when more_like queries are involved. That would suggest that the problem was worsened by the DC switchover, but not directly caused by it.
+
+==Scorecard==
+
+
+
+Incident Engagement  ScoreCard
+
+                                              	Question                                                                                                          	Answer
+(yes/no)	Notes
+People                                        	Were the people responding to this incident sufficiently different than the previous five incidents?              	N/A	
+People                                        	Were the people who responded prepared enough to respond effectively                                              	Y  	
+People                                        	Were fewer than five people paged?                                                                                	Y  	
+People                                        	Were pages routed to the correct sub-team(s)?                                                                     	Y  	
+People                                        	Were pages routed to online (business hours) engineers?  Answer “no” if engineers were paged after business hours.	Y  	
+Process                                       	Was the "Incident status" section atop the Google Doc kept up-to-date during the incident?                        	N  	
+Process                                       	Was a public wikimediastatus.net entry created?                                                                   	N  	
+Process                                       	Is there a phabricator task for the incident?                                                                     	Y  	
+Process                                       	Are the documented action items assigned?                                                                         	N  	
+Process                                       	Is this incident sufficiently different from earlier incidents so as not to be a repeat occurrence?               	Y  	
+Tooling                                       	To the best of your knowledge was the open task queue free of any tasks that would have prevented this incident? Answer “no” if there are
+open tasks that would prevent this incident or make mitigation easier if implemented.	Y  	
+Tooling                                       	Were the people responding able to communicate effectively during the incident with the existing tooling?         	Y  	
+Tooling                                       	Did existing monitoring notify the initial responders?                                                            	Y  	
+Tooling                                       	Were the engineering tools that were to be used during the incident, available and in service?                    	Y  	
+Tooling                                       	Were the steps taken to mitigate guided by an existing runbook?                                                   	N  	
+Total score (count of all “yes” answers above)	Total score (count of all “yes” answers above)                                                                    	10 	
