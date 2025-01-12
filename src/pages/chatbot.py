@@ -6,6 +6,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
+sys.path.append(os.path.abspath('.'))
 from src.utils import generate_embeddings, extract_plain_text, get_gemini_response
 
 load_dotenv("src/.env")
@@ -29,7 +30,7 @@ if __name__ == "__main__":
             limit=1
         )
         
-        relevant_file_path = os.path.join("src", hits[0].payload['path'], hits[0].payload['file_name'])
+        relevant_file_path = os.path.join(hits[0].payload['path'], hits[0].payload['file_name'])
         incident_report = extract_plain_text(relevant_file_path)
         
         replacements = {

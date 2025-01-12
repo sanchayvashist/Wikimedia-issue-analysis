@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 
-from utils import generate_embeddings, extract_plain_text, MODEL_HIDDEN_SIZE
+from src.utils import generate_embeddings, extract_plain_text, MODEL_HIDDEN_SIZE
 
 load_dotenv()
 
@@ -40,7 +40,7 @@ def load_files_and_create_embeddings(directory):
 
 if __name__ == "__main__":
     # Load files and generate embeddings
-    embeddings, metadata = load_files_and_create_embeddings("data/assignment_data")
+    embeddings, metadata = load_files_and_create_embeddings("assignment_data")
 
     # Upload embeddings to Qdrant
     points = [
